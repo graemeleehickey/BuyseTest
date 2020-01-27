@@ -6,11 +6,11 @@
 \usage{
 BuyseTest(formula, data, scoring.rule = NULL, correction.uninf = NULL,
   model.tte = NULL, method.inference = NULL, n.resampling = NULL,
-  hierarchical = NULL, weight = NULL, neutral.as.uninf = NULL,
-  keep.pairScore = NULL, seed = 10, cpus = NULL, trace = NULL,
-  treatment = NULL, endpoint = NULL, type = NULL, threshold = NULL,
-  censoring = NULL, operator = NULL, strata = NULL, keep.comparison,
-  method.tte)
+  strata.resampling = NULL, hierarchical = NULL, weight = NULL,
+  neutral.as.uninf = NULL, keep.pairScore = NULL, seed = 10,
+  cpus = NULL, trace = NULL, treatment = NULL, endpoint = NULL,
+  type = NULL, threshold = NULL, status = NULL, operator = NULL,
+  censoring = NULL, strata = NULL, keep.comparison, method.tte)
 }
 \arguments{
 \item{formula}{[formula] a symbolic description of the GPC model,
@@ -31,10 +31,13 @@ See Details, section "Handling missing values".}
 Models must \code{prodlim} objects and stratified on the treatment and strata variable. When used, the uncertainty from the estimates of these survival models is ignored.}
 
 \item{method.inference}{[character] method used to compute confidence intervals and p-values.
-Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"stratified permutation"}, \code{"bootstrap"}, \code{"stratified bootstrap"}, \code{"studentized bootstrap"}, or \code{"studentized stratified bootstrap"}.
+Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"bootstrap"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
 See Details, section "Statistical inference".}
 
 \item{n.resampling}{[integer] the number of permutations/samples used for computing the confidence intervals and the p.values. 
+See Details, section "Statistical inference".}
+
+\item{strata.resampling}{[character] the variable on which the permutation/sampling should be stratified. 
 See Details, section "Statistical inference".}
 
 \item{hierarchical}{[logical] should only the uninformative pairs be analyzed at the lower priority endpoints (hierarchical GPC)?
@@ -58,7 +61,7 @@ See Details, section "Statistical inference".}
 \item{trace}{[integer] should the execution of the function be traced ? \code{0} remains silent
 and \code{1}-\code{3} correspond to a more and more verbose output in the console.}
 
-\item{treatment, endpoint, type, threshold, censoring, operator, strata}{Alternative to \code{formula} for describing the GPC model.
+\item{treatment, endpoint, type, threshold, status, operator, censoring, strata}{Alternative to \code{formula} for describing the GPC model.
 See Details, section "Specification of the GPC model".}
 
 \item{keep.comparison}{Obsolete. Alias for 'keep.pairScore'.}
@@ -82,7 +85,7 @@ Must have only two levels (e.g. \code{0} and \code{1}).
   \item \code{endpoint}: [character vector] the name of the endpoint variable(s).
   \item \code{threshold}: [numeric vector] critical values used to compare the pairs (threshold of minimal important difference).
 There must be one threshold for each endpoint variable; it must be \code{NA} for binary endpoints and positive for continuous or time to event endpoints. 
-  \item \code{censoring}: [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
+  \item \code{status}: [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
 Must value \code{NA} when the endpoint is not a time to event.
   \item \code{operator}: [character vector] the sign defining a favorable endpoint.
 \code{">0"} indicates that higher values are favorable while "<0" indicates the opposite.
@@ -91,10 +94,11 @@ When the operator is set to \code{"<0"} the corresponding column in the dataset 
 a binary outcome  (\code{"b"}, \code{"bin"}, or \code{"binary"}),
 a continuous outcome  (\code{"c"}, \code{"cont"}, or \code{"continuous"}),
 or a time to event outcome  (\code{"t"}, \code{"tte"}, \code{"time"}, or \code{"timetoevent"})
+  \item \code{censoring}: [character vector] is the endpoint subject to right or left censoring (\code{"left"} or \code{"right"}). The default is right-censoring.
   \item \code{strata}: [character vector] if not \code{NULL}, the GPC will be applied within each group of patient defined by the strata variable(s).
 }
 The formula interface can be more concise, especially when considering few outcomes, but may be more difficult to apprehend for new users.
-Note that arguments \code{endpoint}, \code{threshold}, \code{censoring}, \code{operator}, and \code{type} must have the same length. \cr \cr \cr
+Note that arguments \code{endpoint}, \code{threshold}, \code{status}, \code{operator},  \code{type}, and \code{censoring} must have the same length. \cr \cr \cr
 
 
 \bold{GPC procedure} \cr
@@ -115,7 +119,7 @@ To export the classification of each pair set the argument code{keep.pairScore} 
   \item \code{scoring.rule}: indicates how to handle right-censoring in time to event endpoints.
 The Gehan's scoring rule (argument \code{scoring.rule="Gehan"}) only scores pairs that can be decidedly classified as favorable, unfavorable, or neutral
 while the "Peron"'s scoring rule (argument \code{scoring.rule="Peron"}) uses the empirical survival curves of each group to also score the pairs that cannot be decidedly classified.
-The Peron's scoring rule is the recommanded scoring rule.
+The Peron's scoring rule is the recommanded scoring rule but only handles right-censoring.
   \item \code{correction.uninf}: indicates how to handle missing values that could not be classified by the scoring rule. \code{0} treat them as uninformative:
 if \code{neutral.as.uninf=FALSE}  - this is an equivalent to complete case analysis -
 while for \code{neutral.as.uninf=TRUE} uninformative pairs are treated as neutral, i.e., analyzed at the following endpoint (if any).
@@ -135,14 +139,15 @@ Available methods are:
 The U-statistic theory indicates that this approximation is asymptotically exact.
 The variance is computed using a H-projection of order 1 (default option), which is a consistent but downward biased estimator.
 An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
-\bold{WARNING}: the current implementation of the H-projection is not valid when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}) and the Peron scoring rule (\code{scoring.rule="Peron"}).
-  \item argument \code{method.inference="permutation"} or \code{method.inference="stratified permutation"}:
-  \item argument \code{method.inference="bootstrap"} or \code{method.inference="stratified bootstrap"}:
+\bold{WARNING}: the current implementation of the H-projection has not been validated when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
+  \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
+  \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
+  \item argument \code{method.inference=" studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
 }
 Additional arguments for permutation and bootstrap resampling:
 \itemize{
-   \item when stratified, permutation and bootstrap are performed separately in each strata level (and not each treatment group).
-This is therefore only relevant for stratified analyses.
+   \item \code{strata.resampling} If \code{NA} or of length 0, the permutation/non-parametric boostrap will be performed by resampling in the whole sample.
+Otherwise, the permutation/non-parametric boostrap will be performed separately for each level that the variable defined in \code{strata.resampling} take.
    \item \code{n.resampling} set the number of permutations/samples used.
 A large number of permutations (e.g. \code{n.resampling=10000}) are needed to obtain accurate CI and p.value. See (Buyse et al., 2010) for more details.
    \item \code{cpus} indicates whether the resampling procedure can be splitted on several cpus to save time. Can be set to \code{"all"} to use all available cpus.
@@ -153,7 +158,7 @@ The detection of the number of cpus relies on the \code{detectCores} function fr
 \bold{Default values} \cr
 The default of the arguments
 \code{scoring.rule}, \code{correction.uninf}, \code{method.inference}, \code{n.resampling},
-\code{hierarchical}, \code{neutral.as.uninf}, \code{keep.pairScore}, \code{n.resampling},
+\code{hierarchical}, \code{neutral.as.uninf}, \code{keep.pairScore}, \code{strata.resampling},
 \code{cpus}, \code{trace} is read from \code{BuyseTest.options()}. \cr
 Additional (hidden) arguments are \itemize{
  \item \code{alternative} [character] the alternative hypothesis. Must be one of "two.sided", "greater" or "less" (used by \code{confint}).
@@ -174,12 +179,12 @@ df.data <- simBuyseTest(1e2, n.strata = 2)
 
                                        # display 
 if(require(prodlim)){
-   resKM_tempo <- prodlim(Hist(eventtime,status)~Treatment, data = df.data)
+   resKM_tempo <- prodlim(Hist(eventtime,status)~treatment, data = df.data)
    plot(resKM_tempo)
 }
 
 #### one time to event endpoint ####
-BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data= df.data)
+BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data= df.data)
 
 summary(BT) # net benefit
 summary(BT, percentage = FALSE)  
@@ -187,11 +192,11 @@ summary(BT, statistic = "winRatio") # win Ratio
 
 ## bootstrap to compute the CI
 \dontrun{
-    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e3)
 }
 \dontshow{
-    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e1, trace = 0)
 }
 summary(BT, statistic = "netBenefit") ## default
@@ -199,28 +204,28 @@ summary(BT, statistic = "winRatio")
 
 ## parallel bootstrap
 \dontrun{
-    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e3, cpus = 2)
     summary(BT)
 }
 
 ## method Gehan is much faster but does not optimally handle censored observations
-BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                 scoring.rule = "Gehan", trace = 0)
 summary(BT)
 
 #### one time to event endpoint: only differences in survival over 1 unit ####
-BT <- BuyseTest(Treatment ~ TTE(eventtime, threshold = 1, censoring = status), data=df.data)
+BT <- BuyseTest(treatment ~ TTE(eventtime, threshold = 1, status = status), data=df.data)
 summary(BT)
 
 #### one time to event endpoint with a strata variable
-BT <- BuyseTest(Treatment ~ strata + TTE(eventtime, censoring = status), data=df.data)
+BT <- BuyseTest(treatment ~ strata + TTE(eventtime, status = status), data=df.data)
 summary(BT)
 
 #### several endpoints with a strata variable
-f <- Treatment ~ strata + T(eventtime, 1, status) + B(toxicity) 
+f <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
 f <- update(f, 
-            ~. + T(eventtime, 0.5, status) + C(score, 1) + T(eventtime, 0.25, status))
+            ~. + T(eventtime, status, 0.5) + C(score, 1) + T(eventtime, status, 0.25))
 
 BT <- BuyseTest(f, data=df.data)
 summary(BT)
@@ -234,7 +239,7 @@ if(require(survival)){
   data(veteran,package="survival")
  
   ## scoring.rule = "Gehan"
-  BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
+  BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
                         data=veteran, scoring.rule="Gehan",
                         method.inference = "permutation", n.resampling = 1e3)
   
@@ -242,7 +247,7 @@ if(require(survival)){
   summary_Gehan <- summary(BT_Gehan, statistic = "winRatio")
   
   ## scoring.rule = "Peron"
-  BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
+  BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
                         data=veteran, scoring.rule="Peron",
                         method.inference = "permutation", n.resampling = 1e3)
 
@@ -263,5 +268,8 @@ On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). 
 \code{\link{BuyseRes-class}} for a presentation of the \code{BuyseRes} object. \cr
 \code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
 }
-\keyword{BuyseTest}
+\author{
+Brice Ozenne
+}
+\keyword{BuyseTes}
 \keyword{function}

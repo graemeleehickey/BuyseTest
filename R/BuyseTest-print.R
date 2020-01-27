@@ -4,10 +4,11 @@
 #' @description Functions called by \code{\link{BuyseTest}} to display the settings.
 #' 
 #' @keywords internal
+#' @author Brice Ozenne
 
 ## * Function printGeneral
 #' @rdname internal-print
-printGeneral <- function(censoring,
+printGeneral <- function(status,
                          D,
                          D.TTE,
                          data,
@@ -16,6 +17,7 @@ printGeneral <- function(censoring,
                          level.strata,
                          level.treatment,
                          scoring.rule,
+                         M.status,
                          neutral.as.uninf,
                          correction.uninf,
                          operator,
@@ -28,7 +30,6 @@ printGeneral <- function(censoring,
                          Wscheme,
                          ...){
 
-
     if(!is.null(strata)){
         n.strata <- length(level.strata)
     }else{
@@ -37,7 +38,7 @@ printGeneral <- function(censoring,
 
     ## ** Prepare
     ## endpoint
-    name.col <- c("NA", "endpoint","type","operator","threshold","censoring")
+    name.col <- c("NA", "endpoint","type","operator","threshold","event")
     df.endpoint <- data.frame(matrix(NA, nrow = D, ncol = 6,
                                      dimnames = list(NULL, name.col)
                                      ))
@@ -52,8 +53,9 @@ printGeneral <- function(censoring,
     df.endpoint$type <- c("binary","continuous","time to event")[type]
     df.endpoint$operator <- c("lower is favorable","higher is favorable")[1 + (operator == ">0")]
     df.endpoint$threshold[type!=1] <- threshold[type!=1]
-    df.endpoint$censoring[type==3] <- censoring[type==3]
-
+    df.endpoint$event[type==3] <- status[type==3]
+    
+    
     ## add white space
     df.endpoint$endpoint <- paste0(df.endpoint$endpoint," ")
     df.endpoint$type <- paste0(df.endpoint$type," ")
@@ -61,35 +63,51 @@ printGeneral <- function(censoring,
     df.endpoint$threshold <- paste0(df.endpoint$threshold," ")
 
     if(all(type!=3)){
-        df.endpoint$censoring <- NULL
+        df.endpoint$event <- NULL
         if(all(type!=2)){
             df.endpoint$threshold <- NULL
         }
+    }else{
+        txt.eventType <- sapply(status[type==3], function(iC){
+            return(paste0(" (",paste(sort(unique(M.status[,iC])), collapse = " "),")"))
+        })
+        df.endpoint$event[type==3] <- paste0(df.endpoint$event[type==3],txt.eventType)
     }
     
     ## ** Display
     cat("Settings \n")
-    cat("   - treatment groups: Control = ",level.treatment[1]," and Treatment = ",level.treatment[2],"\n", sep = "")
+    cat("   - 2 groups  ",if(D>1){" "},": Control = ",level.treatment[1]," and Treatment = ",level.treatment[2],"\n", sep = "")
     cat("   - ",D," endpoint",if(D>1){"s"},": \n", sep = "")
     print(df.endpoint, row.names = FALSE, quote = FALSE, right = FALSE)
     if(n.strata>1){
         txt.variable <- switch(as.character(length(strata)),
-                               "0" = " variable",
+                               "1" = "variable",
                                "variables")        
-        cat("   - ", n.strata, " strata with levels: ",paste(level.strata, collapse = " ") , "\n", sep = "")
-        cat("                ",txt.variable,": ",paste(strata, collapse = " ")," \n", sep = "")
+        cat("   - ", n.strata, " strata   : levels ",paste(level.strata, collapse = " ") , " (",txt.variable,": ",paste(strata, collapse = " "),") \n", sep = "")
     }
-    cat("   - management of neutral pairs: ")
-    if(neutral.as.uninf){
-        cat("re-analyzed using endpoints of lower priority (if any) \n")
-    }else{
-        cat("ignore endpoints of lower priority \n")
+    if(D>1){
+        cat("   - neutral pairs: ")
+        if(neutral.as.uninf){
+            cat("re-analyzed using lower priority endpoints \n")
+        }else{
+            cat("ignored at lower priority endpoints \n")
+        }
     }
     if(D.TTE>0){
-        cat("   - management of censored survival pairs: ")
+        cat("   - right-censored pairs: ")
+
+        n.CR <- sum(grep("2", txt.eventType))
+        if(n.CR==D.TTE){
+            txt.Peron <- "cif"
+        }else if(n.CR==0){
+            txt.Peron <- "survival"
+        }else{
+            txt.Peron <- "survival/cif"
+        }
+        
         switch(as.character(scoring.rule),
-               "0" = cat("uninformative pairs \n"),
-               "1" = cat("use Kaplan Meier survival curves to compute the score \n")
+               "0" = cat("deterministic score or uninformative \n"),
+               "1" = cat("probabilistic score based on the ",txt.Peron," curves \n",sep="")
                )
     }
     ## if(trace>2){
@@ -116,9 +134,8 @@ printInference <- function(method.inference, n.resampling, cpus, seed, ...){
         }else if(attr(method.inference,"permutation")){
             txt.type <- paste0("permutation test with ",n.resampling," permutations")
         }
-
-        if(attr(method.inference,"stratified")){
-            txt.type <- paste0("stratified ",txt.type)
+        if(!is.na(attr(method.inference,"resampling-strata"))){
+            txt.type <- paste0(txt.type, " (stratified by \"",paste(attr(method.inference,"resampling-strata"),sep="\" \""),"\")")
         }
 
         ## display

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jan  7 2019 (11:20) 
 ## Version: 
-## Last-Updated: sep 12 2019 (09:22) 
+## Last-Updated: dec  5 2019 (13:15) 
 ##           By: Brice Ozenne
-##     Update #: 63
+##     Update #: 89
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -31,21 +31,22 @@
 #' Can be only for the nuisance parameters (\code{"nuisance"}),
 #' or for the u-statistic given the nuisance parameters (\code{"u-statistic"}),
 #' or both.
+#' @param normalize [logical] if \code{TRUE} the iid is centered and multiplied by the sample size.
+#' Otherwise not.
 #' 
 #' @seealso 
 #' \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr
 #' \code{\link{BuyseRes-summary}} for a more detailed presentation of the \code{BuyseRes} object.
 #' 
 #' @keywords iid BuyseRes-method
+#' @author Brice Ozenne
 
 ## * Method - iid
 #' @rdname BuyseRes-iid
 #' @exportMethod iid
 setMethod(f = "iid",
           signature = "BuyseRes",
-          definition = function(object,
-                                endpoint = NULL,
-                                type = "all"){
+          definition = function(object, endpoint = NULL, normalize = TRUE, type = "all"){
 
 
               ## ** check arguments              
@@ -74,9 +75,9 @@ setMethod(f = "iid",
               ## ** extract H-decomposition
               n.endpoint <- length(valid.endpoint)
 
-              n.obs <- NROW(object@iid$favorable)
+              n.obs <- NROW(object@iidAverage$favorable)
               if(type %in% c("all","u-statistic")){
-                  object.iid <- object@iid
+                  object.iid <- object@iidAverage
               }else{
                   object.iid <- list(favorable = matrix(0, nrow = n.obs, ncol = n.endpoint,
                                                         dimnames = list(NULL, valid.endpoint)),
@@ -87,6 +88,24 @@ setMethod(f = "iid",
               if(type %in% c("all","nuisance") && (object@scoring.rule=="Peron")){
                   object.iid$favorable <- object.iid$favorable + object@iidNuisance$favorable
                   object.iid$unfavorable <- object.iid$unfavorable + object@iidNuisance$unfavorable
+              }
+
+              if(normalize==FALSE){
+                  delta.favorable <- colSums(object@count.favorable)/sum(object@n.pairs)
+                  delta.unfavorable <- colSums(object@count.unfavorable)/sum(object@n.pairs)
+                  indexC <- attr(object@level.treatment,"indexC")
+                  indexT <- attr(object@level.treatment,"indexT")
+
+                  ## remove scaling 
+                  object.iid$favorable[indexC,] <- length(indexC) * object.iid$favorable[indexC,]
+                  object.iid$favorable[indexT,] <- length(indexT) * object.iid$favorable[indexT,]
+
+                  object.iid$unfavorable[indexC,] <- length(indexC) * object.iid$unfavorable[indexC,]
+                  object.iid$unfavorable[indexT,] <- length(indexT) * object.iid$unfavorable[indexT,]
+
+                  ## remove centering
+                  object.iid$unfavorable <- sweep(object.iid$unfavorable, MARGIN = 2, FUN = "+", STATS = cumsum(delta.unfavorable))
+                  object.iid$favorable <- sweep(object.iid$favorable, MARGIN = 2, FUN = "+", STATS = cumsum(delta.favorable))
               }
               ## ** accumulate H-decomposition
               if(is.null(endpoint)){                  

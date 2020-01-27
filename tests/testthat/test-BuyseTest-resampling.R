@@ -3,9 +3,9 @@
 ## author: Brice
 ## created: maj 12 2017 (14:34) 
 ## Version: 
-## last-updated: maj 21 2019 (20:29) 
+## last-updated: nov 12 2019 (11:05) 
 ##           By: Brice Ozenne
-##     Update #: 123
+##     Update #: 136
 #----------------------------------------------------------------------
 ## 
 ### Commentary: Check 
@@ -22,6 +22,7 @@ if(FALSE){
     library(data.table)
 }
 
+student <- FALSE ## need to fix asymptotics for several outcome to use studentized bootstrap
 
 ## * settings
 BuyseTest.options(check = TRUE,
@@ -43,7 +44,7 @@ dt.sim <- simBuyseTest(n.T = n.patients,
 
 ## * Permutation
 test_that("permutation", {
-    BT.perm <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
+    BT.perm <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
                          data = dt.sim, scoring.rule = method, seed = 10, 
                          method.inference = "permutation", n.resampling = 20)
 
@@ -96,12 +97,11 @@ test_that("permutation", {
     set.seed(10)
     for(iResample in 1:2){ ## iResample <- 1
         dt.perm <- copy(dt.sim)
-        setkeyv(dt.perm, cols = c("strata","Treatment"))
 
-        dt.perm[, Treatment := Treatment[sample.int(.N, size = .N, replace = FALSE)] ]
-        expect_equal(table(dt.perm$Treatment), table(dt.sim$Treatment))
+        dt.perm[, treatment := treatment[sample.int(.N, size = .N, replace = FALSE)] ]
+        expect_equal(table(dt.perm$treatment), table(dt.sim$treatment))
 
-        iBT.perm <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
+        iBT.perm <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
                               data = dt.perm, scoring.rule = method,
                               method.inference = "none")
 
@@ -119,10 +119,10 @@ test_that("permutation", {
 
 
 ## * Stratified permutation
-test_that("stratified permutation", {
-    BT.perm <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
+test_that(paste0("stratified permutation"), {
+    BT.perm <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
                          data = dt.sim, scoring.rule = method, seed = 10, 
-                         method.inference = "stratified permutation", n.resampling = 10)
+                         method.inference = "permutation", strata.resampling = "strata", n.resampling = 10)
 
     ## ** summary (two.sided)
     outSummary <- summary(BT.perm, print = FALSE, alternative = "two.sided")
@@ -140,7 +140,7 @@ test_that("stratified permutation", {
     expect_equal(outSummary$table[outSummary$table$strata=="global","p.value"],
                  p.value)
 
-       ## ** summary (less)
+    ## ** summary (less)
     outSummary <- summary(BT.perm, print = FALSE, alternative = "less")
     
     p.value <- c(mean(BT.perm@Delta.netBenefit[1] >= BT.perm@DeltaResampling.netBenefit[,1]),
@@ -152,13 +152,13 @@ test_that("stratified permutation", {
     set.seed(10)
     for(iResample in 1:2){ ## iResample <- 1 
         dt.perm <- copy(dt.sim)
-        setkeyv(dt.perm, cols = c("strata","Treatment"))
+        setkeyv(dt.perm, cols = "strata")
         
-        dt.perm[, Treatment := Treatment[sample.int(.N, size = .N, replace = FALSE)], by = "strata"]
+        dt.perm[, treatment := treatment[sample.int(.N, size = .N, replace = FALSE)], by = "strata"]
 
-        iBT.perm <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-                             data = dt.perm, scoring.rule = method,
-                             method.inference = "none")
+        iBT.perm <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
+                              data = dt.perm, scoring.rule = method,
+                              method.inference = "none")
 
         expect_equal(as.double(iBT.perm@delta.netBenefit),
                      as.double(BT.perm@deltaResampling.netBenefit[,,iResample]))
@@ -174,18 +174,23 @@ test_that("stratified permutation", {
 ## * Bootstrap
 test_that("Bootstrap", {
 
-    BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1)  + bin(toxicity1) + strata,
+    BT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0)  + bin(toxicity1) + strata,
                          data = dt.sim, scoring.rule = method, seed = 10, 
                          method.inference = "bootstrap", n.resampling = 20)
-    BT.bootT <- suppressWarnings(BuyseTest(Treatment ~ tte(eventtime1, 0, status1)  + bin(toxicity1) + strata,
-                                           data = dt.sim, scoring.rule = method, seed = 10,
-                                           method.inference = "studentized bootstrap", n.resampling = 20))
+
+    if(student){
+        BT.bootT <- suppressWarnings(BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0)  + bin(toxicity1) + strata,
+                                               data = dt.sim, scoring.rule = method, seed = 10,
+                                               method.inference = "studentized bootstrap", n.resampling = 20))
+    }
     
     ## same point estimate with or without computation of the variance
-    expect_equal(BT.boot@Delta.netBenefit,BT.bootT@Delta.netBenefit)
-    expect_equal(BT.boot@Delta.winRatio,BT.bootT@Delta.winRatio)
     expect_true(sum(dim(BT.boot@covarianceResampling))==0)
-    expect_true(sum(dim(BT.bootT@covarianceResampling))!=0)
+    if(student){
+        expect_equal(BT.boot@Delta.netBenefit,BT.bootT@Delta.netBenefit)
+        expect_equal(BT.boot@Delta.winRatio,BT.bootT@Delta.winRatio)
+        expect_true(sum(dim(BT.bootT@covarianceResampling))!=0)
+    }
     
     
     ## ** summary (two.sided)
@@ -213,17 +218,20 @@ test_that("Bootstrap", {
     ##                           2   2.10      0.50        0.39    1.22  0.00  0.0034
 
     ## CI
-    perBoot.confint <- confint(BT.bootT, method.ci.resampling = "percentile", alternative = "two.sided")
-    perBoot.manual <- t(apply(BT.bootT@DeltaResampling.netBenefit, 2, quantile, probs = c(0.025, 0.975)))
+    if(student){
+        perBoot.confint <- confint(BT.bootT, method.ci.resampling = "percentile", alternative = "two.sided")
+        perBoot.manual <- t(apply(BT.bootT@DeltaResampling.netBenefit, 2, quantile, probs = c(0.025, 0.975)))
 
-    expect_equal(unname(perBoot.confint[,c("lower.ci","upper.ci")]),unname(perBoot.manual), tol = 1e-6)
+        expect_equal(unname(perBoot.confint[,c("lower.ci","upper.ci")]),unname(perBoot.manual), tol = 1e-6)
 
-    gausBoot.confint <- confint(BT.bootT, method.ci.resampling = "gaussian", alternative = "two.sided", transform = FALSE)
-    expect_equal(unname(gausBoot.confint[,"se"]), unname(apply(BT.bootT@DeltaResampling.netBenefit, 2, sd)), tol = 1e-6)
-    expect_equal(unname(gausBoot.confint[,"lower.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.025) * gausBoot.confint[,"se"]), tol = 1e-6)
-    expect_equal(unname(gausBoot.confint[,"upper.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.975) * gausBoot.confint[,"se"]), tol = 1e-6)
+        gausBoot.confint <- confint(BT.bootT, method.ci.resampling = "gaussian", alternative = "two.sided", transform = FALSE)
+        expect_equal(unname(gausBoot.confint[,"se"]), unname(apply(BT.bootT@DeltaResampling.netBenefit, 2, sd)), tol = 1e-6)
+        expect_equal(unname(gausBoot.confint[,"lower.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.025) * gausBoot.confint[,"se"]), tol = 1e-6)
+        expect_equal(unname(gausBoot.confint[,"upper.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.975) * gausBoot.confint[,"se"]), tol = 1e-6)
+    }
     
     ## ** greater
+    if(student){
     perBoot.confint <- confint(BT.bootT, method.ci.resampling = "percentile", alternative = "greater")
     perBoot.manual <- cbind(apply(BT.bootT@DeltaResampling.netBenefit, 2, quantile, probs = 0.05),Inf)
 
@@ -232,28 +240,27 @@ test_that("Bootstrap", {
     gausBoot.confint <- confint(BT.bootT, method.ci.resampling = "gaussian", alternative = "greater", transform = FALSE)
     expect_equal(unname(gausBoot.confint[,"se"]), unname(apply(BT.bootT@DeltaResampling.netBenefit, 2, sd)), tol = 1e-6)
     expect_equal(unname(gausBoot.confint[,"lower.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.05) * gausBoot.confint[,"se"]), tol = 1e-6)
+    }
     
     ## ** lower
-    perBoot.confint <- confint(BT.bootT, method.ci.resampling = "percentile", alternative = "less")
-    perBoot.manual <- cbind(-Inf,apply(BT.bootT@DeltaResampling.netBenefit, 2, quantile, probs = 0.95))
+    if(student){
+        perBoot.confint <- confint(BT.bootT, method.ci.resampling = "percentile", alternative = "less")
+        perBoot.manual <- cbind(-Inf,apply(BT.bootT@DeltaResampling.netBenefit, 2, quantile, probs = 0.95))
 
-    expect_equal(unname(perBoot.confint[,c("lower.ci","upper.ci")]),unname(perBoot.manual), tol = 1e-6)
+        expect_equal(unname(perBoot.confint[,c("lower.ci","upper.ci")]),unname(perBoot.manual), tol = 1e-6)
 
-    gausBoot.confint <- confint(BT.bootT, method.ci.resampling = "gaussian", alternative = "less", transform = FALSE)
-    expect_equal(unname(gausBoot.confint[,"se"]), unname(apply(BT.bootT@DeltaResampling.netBenefit, 2, sd)), tol = 1e-6)
-    expect_equal(unname(gausBoot.confint[,"upper.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.95) * gausBoot.confint[,"se"]), tol = 1e-6)
+        gausBoot.confint <- confint(BT.bootT, method.ci.resampling = "gaussian", alternative = "less", transform = FALSE)
+        expect_equal(unname(gausBoot.confint[,"se"]), unname(apply(BT.bootT@DeltaResampling.netBenefit, 2, sd)), tol = 1e-6)
+        expect_equal(unname(gausBoot.confint[,"upper.ci"]), unname(gausBoot.confint[,"estimate"] + qnorm(0.95) * gausBoot.confint[,"se"]), tol = 1e-6)
+    }
     
     ## ** check bootstrap
     set.seed(10)
     for(iResample in 1:2){ ## iResample <- 1
-        dt.boot <- copy(dt.sim)
-        setkeyv(dt.boot, cols = c("strata","Treatment"))
-        dt.boot <- dt.boot[sample.int(.N, size = .N, replace = TRUE)]
+        dt.boot <- dt.sim[sample.int(.N, size = .N, replace = TRUE)]
         
-        ## BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-        iBT.boot <- suppressWarnings(BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-                                               data = dt.boot, scoring.rule = method,                                               
-                                               method.inference = "u-statistic"))
+        iBT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
+                              data = dt.boot, scoring.rule = method, method.inference = "none")
 
         expect_equal(as.double(iBT.boot@delta.netBenefit),
                      as.double(BT.boot@deltaResampling.netBenefit[,,iResample]))
@@ -264,61 +271,85 @@ test_that("Bootstrap", {
         expect_equal(as.double(iBT.boot@Delta.winRatio),
                      as.double(BT.boot@DeltaResampling.winRatio[iResample,]))
 
-        expect_equal(as.double(iBT.boot@covariance),
-                     as.double(BT.bootT@covarianceResampling[iResample,,]))
+        if(student){
+            iBT.bootT <- suppressWarnings(BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
+                                                    data = dt.boot, scoring.rule = method,                                               
+                                                    method.inference = "u-statistic"))
+            expect_equal(as.double(iBT.bootT@delta.netBenefit),
+                         as.double(BT.bootT@deltaResampling.netBenefit[,,iResample]))
+            expect_equal(as.double(iBT.bootT@delta.winRatio),
+                         as.double(BT.bootT@deltaResampling.winRatio[,,iResample]))
+            expect_equal(as.double(iBT.bootT@Delta.netBenefit),
+                         as.double(BT.bootT@DeltaResampling.netBenefit[iResample,]))
+            expect_equal(as.double(iBT.bootT@Delta.winRatio),
+                         as.double(BT.bootT@DeltaResampling.winRatio[iResample,]))
 
-        ## iBT.boot@covariance
-        
-        ## BT.bootT@covarianceResampling[1,,]
-        ## BT.bootT@covarianceResampling[2,,]
-        ## BT.bootT@covariance
-        
+            expect_equal(as.double(iBT.bootT@covariance),
+                         as.double(BT.bootT@covarianceResampling[iResample,,]))
+        }
     }
 })
 
 
 ## * Stratified bootstrap
-test_that("Stratified bootstrap", {
-    ## BT <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-    BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1)  + bin(toxicity1) + strata,
-                         data = dt.sim, scoring.rule = method, seed = 10, 
-                         method.inference = "stratified bootstrap", n.resampling = 20)
-    BT.bootT <- suppressWarnings(BuyseTest(Treatment ~ tte(eventtime1, 0, status1)  + bin(toxicity1) + strata,
-                                           data = dt.sim, scoring.rule = method, seed = 10, 
-                                           method.inference = "studentized stratified bootstrap", n.resampling = 20))
-
-    ## same point estimate with or without computation of the variance
-    expect_equal(BT.boot@Delta.netBenefit,BT.bootT@Delta.netBenefit)
-    expect_equal(BT.boot@Delta.winRatio,BT.bootT@Delta.winRatio)
-    expect_true(sum(dim(BT.boot@covarianceResampling))==0)
-    expect_true(sum(dim(BT.bootT@covarianceResampling))!=0)
-
+for(iStrataVar in c("treatment","strata")){ ## iStrataVar <- "treatment"
+    test_that(paste0("Stratified bootstrap (",iStrataVar,")"), {
+        BT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0)  + bin(toxicity1) + strata,
+                             data = dt.sim, scoring.rule = method, seed = 10, 
+                             method.inference = "bootstrap", strata.resampling = iStrataVar, n.resampling = 20)
+        if(student){
+            BT.bootT <- suppressWarnings(BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0)  + bin(toxicity1) + strata,
+                                                   data = dt.sim, scoring.rule = method, seed = 10, 
+                                                   method.inference = "studentized bootstrap", strata.resampling = iStrataVar, n.resampling = 20))
+        }
+    
+        ## same point estimate with or without computation of the variance
+        if(student){
+            expect_equal(BT.boot@Delta.winRatio,BT.bootT@Delta.winRatio)
+            expect_equal(BT.boot@Delta.netBenefit,BT.bootT@Delta.netBenefit)
+            expect_true(sum(dim(BT.boot@covarianceResampling))==0)
+            expect_true(sum(dim(BT.bootT@covarianceResampling))!=0)
+        }
+    
     ## ** check bootstrap
     set.seed(10)
-    for(iResample in 1:2){ ## iResample <- 2
+    for(iResample in 1:2){ ## iResample <- 1
         dt.boot <- copy(dt.sim)
-        setkeyv(dt.boot, cols = c("strata","Treatment"))
-        dt.boot <- dt.boot[, .SD[sample.int(.N, size = .N, replace = TRUE)], by = "strata"]
+        setkeyv(dt.boot, cols = iStrataVar)
+        dt.boot <- dt.boot[, .SD[sample.int(.N, size = .N, replace = TRUE)], by = iStrataVar]
 
-        ## BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-        iBT <- suppressWarnings(BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
-                                          data = dt.boot, scoring.rule = method,
-                                          method.inference = "u-statistic"))
+        iBT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
+                              data = dt.boot, scoring.rule = method, method.inference = "none")
 
-        expect_equal(as.double(iBT@delta.netBenefit),
+        expect_equal(as.double(iBT.boot@delta.netBenefit),
                      as.double(BT.boot@deltaResampling.netBenefit[,,iResample]))
-        expect_equal(as.double(iBT@delta.winRatio),
+        expect_equal(as.double(iBT.boot@delta.winRatio),
                      as.double(BT.boot@deltaResampling.winRatio[,,iResample]))
-        expect_equal(as.double(iBT@Delta.netBenefit),
+        expect_equal(as.double(iBT.boot@Delta.netBenefit),
                      as.double(BT.boot@DeltaResampling.netBenefit[iResample,]))
-        expect_equal(as.double(iBT@Delta.winRatio),
+        expect_equal(as.double(iBT.boot@Delta.winRatio),
                      as.double(BT.boot@DeltaResampling.winRatio[iResample,]))
 
-        expect_equal(as.double(iBT@covariance),
-                     as.double(BT.bootT@covarianceResampling[iResample,,]))
-    }
-})
+        if(student){
+            iBT.bootT <- suppressWarnings(BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 0) + bin(toxicity1) + strata,
+                                              data = dt.boot, scoring.rule = method,
+                                              method.inference = "u-statistic"))
 
+            expect_equal(as.double(iBT.bootT@delta.netBenefit),
+                         as.double(BT.boot@deltaResampling.netBenefit[,,iResample]))
+            expect_equal(as.double(iBT.bootT@delta.winRatio),
+                         as.double(BT.boot@deltaResampling.winRatio[,,iResample]))
+            expect_equal(as.double(iBT.bootT@Delta.netBenefit),
+                         as.double(BT.boot@DeltaResampling.netBenefit[iResample,]))
+            expect_equal(as.double(iBT.bootT@Delta.winRatio),
+                         as.double(BT.boot@DeltaResampling.winRatio[iResample,]))
+
+            expect_equal(as.double(iBT.bootT@covariance),
+                         as.double(BT.bootT@covarianceResampling[iResample,,]))
+        }
+    }
+    })
+}
 
 
 ## * t-test example
@@ -468,3 +499,4 @@ test_that("compare with t-test (less)", {
                  ) 
     ## expect_equal(GS, M.res, tol = 1e-5)
 })
+

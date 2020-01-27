@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: sep 12 2019 (15:30) 
+## Last-Updated: nov 21 2019 (14:12) 
 ##           By: Brice Ozenne
-##     Update #: 167
+##     Update #: 216
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,22 +20,26 @@
 ##' @description Check the validity of the argument passed the BuyseTest function by the user.
 ##'
 ##' @keywords internal
+##' @author Brice Ozenne
 testArgs <- function(name.call,
-                     censoring,
+                     status,
                      correction.uninf,
                      cpus,
                      data,
                      endpoint,
                      formula,
                      iid,
+                     iidNuisance,
                      keep.pairScore,
                      scoring.rule,
                      model.tte,
                      method.inference,
                      n.resampling,
+                     strata.resampling,
                      hierarchical,
                      neutral.as.uninf,
                      operator,
+                     censoring,
                      seed,
                      strata,
                      threshold,
@@ -48,25 +52,25 @@ testArgs <- function(name.call,
     ## ** data
     if (!data.table::is.data.table(data)) {
         if(inherits(data,"function")){
-            stop("Argument \'data\' is mispecified \n",
-                 "\'data\' cannot be a function \n")
+            stop("Argument \'data\' is mispecified. \n",
+                 "\'data\' cannot be a function. \n")
         }
         data <- data.table::as.data.table(data)
     }else{
         data <- data.table::copy(data)
     }
     if("..rowIndex.." %in% names(data)){
-        stop("BuyseTest: Argument \'data\' must not contain a column \"..rowIndex..\" \n")
+        stop("BuyseTest: Argument \'data\' must not contain a column \"..rowIndex..\". \n")
     }
     if("..NA.." %in% names(data)){
-        stop("BuyseTest: Argument \'data\' must not contain a column \"..NA..\" \n")
+        stop("BuyseTest: Argument \'data\' must not contain a column \"..NA..\". \n")
     }
     if("..strata.." %in% names(data)){
-        stop("BuyseTest: Argument \'data\' must not contain a column \"..strata..\" \n")
+        stop("BuyseTest: Argument \'data\' must not contain a column \"..strata..\". \n")
     }
     
     ## ** extract usefull quantities
-    argnames <- c("treatment", "endpoint", "type", "threshold", "censoring", "strata")
+    argnames <- c("treatment", "endpoint", "type", "threshold", "status", "strata")
 
     D <- length(endpoint) 
     D.TTE <- sum(type == 3) # number of time to event endpoints
@@ -84,30 +88,49 @@ testArgs <- function(name.call,
     }
 
     
-    ## ** censoring
-    if(length(censoring) != D){
-        stop("BuyseTest: \'censoring\' does not match \'endpoint\' size \n",
-             "length(censoring) : ",length(censoring),"\n",
+    ## ** status
+    if(length(status) != D){
+        stop("BuyseTest: \'status\' does not match \'endpoint\' size. \n",
+             "length(status): ",length(status),"\n",
              "length(endpoint) : ",D,"\n")
             
     }
-    if(any(is.na(censoring))){
-        stop("BuyseTest: \'censoring\' must not contain NA \n")
+    if(any(is.na(status))){
+        stop("BuyseTest: \'status\' must not contain NA. \n")
     }
-    if(any(censoring[type==3] == "..NA..") ){
-        stop("BuyseTest: wrong specification of \'censoring\' \n",
-             "\'censoring\' must indicate a variable in data for TTE endpoints \n",
-             "TTE endoints : ",paste(endpoint[type==3],collapse=" "),"\n",
-             "proposed \'censoring\' for these endoints : ",paste(censoring[type==3],collapse=" "),"\n")
+    index.pb <- which(status[type==3] == "..NA..")
+    if(length(index.pb)>0){
+        if(all(attr(censoring,"original")[index.pb] %in% names(data))){
+            stop("BuyseTest: wrong specification of \'status\'. \n",
+                 "\'status\' must indicate a variable in data for TTE endpoints. \n",
+                 "\'censoring\' is used to indicate whether there is left or right censoring. \n",
+                 "Consider changing \'censoring =\' into \'status =\' when in the argument \'formula\' \n")
+        }else{        
+            stop("BuyseTest: wrong specification of \'status\'. \n",
+                 "\'status\' must indicate a variable in data for TTE endpoints. \n",
+                 "TTE endoints: ",paste(endpoint[type==3],collapse=" "),"\n",
+                 "proposed \'status\' for these endoints: ",paste(status[type==3],collapse=" "),"\n")
+        }
     }
-    if(any(censoring[type!=3] !="..NA..") ){
-        stop("BuyseTest: wrong specification of \'censoring\' \n",
-             "\'censoring\' must be \"..NA..\" for binary or continuous endpoints \n",
+    if(any(status[type!=3] !="..NA..") ){
+        stop("BuyseTest: wrong specification of \'status\'. \n",
+             "\'status\' must be \"..NA..\" for binary or continuous endpoints. \n",
              "endoints : ",paste(endpoint[type!=3],collapse=" "),"\n",
-             "proposed \'censoring\' for these endoints : ",paste(censoring[type!=3],collapse=" "),"\n")
+             "proposed \'status\' for these endoints: ",paste(status[type!=3],collapse=" "),"\n")
     }
-        
 
+    ## ** censoring
+    if(any(is.na(censoring))){
+        stop("BuyseTest: wrong specification of \'censoring\'. \n",
+             "\'censoring\' must be \'as.character(NA)\', \"left\", or \"right\" \n",
+             "incorrect \'censoring\' value(s): \"",paste(attr(censoring,"original")[is.na(censoring)], collapse = "\" \""),"\" \n")
+    }
+    if(any(censoring[type==3]==0)){
+        stop("BuyseTest: wrong specification of \'censoring\'. \n",
+             "\'censoring\' must be \"left\" or \"right\" for TTE endpoints \n")
+    }
+
+    
     ## ** cpus
     if(cpus>1){
         validInteger(cpus,
@@ -119,8 +142,12 @@ testArgs <- function(name.call,
     ## ** scoring.rule
     ## must be before time to event endpoints
     if(is.na(scoring.rule)){
-        stop("BuyseTest: wrong specification of \'scoring.rule\' \n",
-             "valid values: \"Gehan\" \"Gehan corrected\" \"Peron\" \"Peron corrected\" \n")
+        stop("BuyseTest: wrong specification of \'scoring.rule\'. \n",
+             "valid values: \"Gehan\" \"Gehan corrected\" \"Peron\" \"Peron corrected\". \n")
+    }
+    if(scoring.rule>0 && any(censoring>1)){
+        warning("The Peron's scoring rule does not support left-censored endpoints \n",
+                "For those endpoints, the Gehan's scoring rule will be used instead.")
     }
 
     ## ## ** model.tte
@@ -128,24 +155,24 @@ testArgs <- function(name.call,
         endpoint.UTTE <- unique(endpoint[type==3])
         D.UTTE <- length(endpoint.UTTE)
         if(!is.list(model.tte) || length(model.tte) != D.UTTE){
-            stop("BuyseTest: argument \'model.tte\' must be a list containing ",D.UTTE," elements \n",
-                 "(one for each unique time to event endpoint) \n")
+            stop("BuyseTest: argument \'model.tte\' must be a list containing ",D.UTTE," elements. \n",
+                 "(one for each unique time to event endpoint). \n")
         }
 
         if(is.null(model.tte) || any(names(model.tte) != endpoint.UTTE)){
-            stop("BuyseTest: argument \'model.tte\' must be a named list \n",
+            stop("BuyseTest: argument \'model.tte\' must be a named list. \n",
                  "valid sequence of names: \"",paste0(endpoint.UTTE, collapse = "\" \""),"\" \n",
                  "proposed names: \"",paste0(names(model.tte), collapse = "\" \""),"\" \n")
         }
 
         vec.class  <- sapply(model.tte, function(iTTE){inherits(iTTE, "prodlim")})
         if(any(vec.class == FALSE) ){
-            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects \n")
+            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects. \n")
         }
 
         vec.predictors  <- sapply(model.tte, function(iTTE){identical(sort(iTTE$discrete.predictors), sort(c(treatment,strata)))})
         if(any(vec.predictors == FALSE) ){
-            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects with \"",paste0(c(treatment,strata),collapse = "\" \""),"\" as predictors \n")
+            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects with \"",paste0(c(treatment,strata),collapse = "\" \""),"\" as predictors. \n")
         }        
     }
     
@@ -156,7 +183,7 @@ testArgs <- function(name.call,
     if(length(index.Bin)>0){
         for(iBin in index.Bin){ ## iterY <- 1
             if(length(unique(na.omit(data[[endpoint[iBin]]])))>2){
-                stop("Binary endpoint cannot have more than 2 levels \n",
+                stop("Binary endpoint cannot have more than 2 levels. \n",
                      "endpoint: ",endpoint[iBin],"\n")
             }
             ## if(any(is.na(data[[endpoint[iBin]]]))){                
@@ -183,16 +210,16 @@ testArgs <- function(name.call,
 
     ## *** time to event endpoint
     index.TTE <- which(type==3)
-    censoring.TTE <- censoring[type==3]
+    status.TTE <- status[type==3]
     if(length(index.TTE)>0){
         validNames(data,
                    name1 = "data",
-                   required.values = censoring.TTE,
+                   required.values = status.TTE,
                    valid.length = NULL,
                    refuse.NULL = FALSE,
                    method = "BuyseTest")
 
-        valid.values.censoring <- 0:2
+        valid.values.status <- 0:2
 
         for(iTTE in index.TTE){
             validNumeric(data[[endpoint[iTTE]]],
@@ -200,9 +227,9 @@ testArgs <- function(name.call,
                          valid.length = NULL,
                          refuse.NA = TRUE,
                          method = "BuyseTest")
-            validNumeric(unique(data[[censoring.TTE[which(index.TTE == iTTE)]]]),
-                         name1 = censoring.TTE[which(index.TTE == iTTE)],
-                         valid.values = valid.values.censoring,
+            validNumeric(unique(data[[status.TTE[which(index.TTE == iTTE)]]]),
+                         name1 = status.TTE[which(index.TTE == iTTE)],
+                         valid.values = valid.values.status,
                          valid.length = NULL,
                          method = "BuyseTest")
         }
@@ -210,6 +237,7 @@ testArgs <- function(name.call,
 
     ## ** endpoint
     validNames(data,
+               name1 = "data",
                required.values = endpoint,
                valid.length = NULL,
                method = "BuyseTest")
@@ -217,8 +245,8 @@ testArgs <- function(name.call,
     ## ** formula
     if(!is.null(formula) && any(name.call %in% argnames)){
         txt <- paste(name.call[name.call %in% argnames], collapse = "\' \'")
-        warning("BuyseTest: argument",if(length(txt)>1){"s"}," \'",txt,"\' ha",if(length(txt)>1){"ve"}else{"s"}," been ignored \n",
-                "when specified, only argument \'formula\' is used \n")
+        warning("BuyseTest: argument",if(length(txt)>1){"s"}," \'",txt,"\' ha",if(length(txt)>1){"ve"}else{"s"}," been ignored. \n",
+                "when specified, only argument \'formula\' is used. \n")
     }
 
     ## ** keep.pairScore
@@ -233,25 +261,27 @@ testArgs <- function(name.call,
 
     ## ** method.inference
     if(length(method.inference)!=1){
-        stop("Argument \'method.inference\' must have length 1 \n")
+        stop("Argument \'method.inference\' must have length 1. \n")
     }
     if(method.inference != "u-statistic-bebu"){ ## asympototic bebu - hidden value only for debugging
         validCharacter(method.inference,
                        valid.length = 1,
-                       valid.values = c("none","u-statistic",
-                                        "bootstrap","stratified bootstrap","studentized bootstrap","studentized stratified bootstrap",
-                                        "permutation","stratified permutation"),
+                       valid.values = c("none","u-statistic","permutation","bootstrap","studentized bootstrap"),
                        method = "BuyseTest")
     }
     if(method.inference != "none" && any(table(data[[treatment]])<2) ){
-        warning("P-value/confidence intervals based on u-statistic theory will not be valid with one observation \n")
+        warning("P-value/confidence intervals will not be valid with only one observation. \n")
     }
-
-    if(iid){
-        if(is.null(model.tte) && D>1 && scoring.rule > 0){
-            warning("The current implementation of the asymptotic distribution does not support several outcomes when scoring.rule=\"Peron\" \n",
-                    "Standard errors / confidence intervals / p-values should not be trusted \n")
-        }        
+    if(!is.na(attr(method.inference,"resampling-strata")) && any(attr(method.inference,"resampling-strata") %in% names(data) == FALSE)){
+        stop("Incorrect value for argument \'strata.resampling\': must correspond to a column in argument \'data\'. \n")
+    }
+    if(!is.na(attr(method.inference,"resampling-strata")) && attr(method.inference,"permutation") && any(attr(method.inference,"resampling-strata") == treatment)){
+        stop("Argument \'strata.resampling\' should not contain the variable used to form the treatment groups when using a permutation test. \n")
+    }
+    if(iid && correction.uninf > 0){
+        warning("The current implementation of the asymptotic distribution has not been validated when using a correction. \n",
+                "Standard errors / confidence intervals / p-values may not be correct. \n",
+                "Consider using a resampling approach or checking the control of the type 1 error with powerBuyseTest. \n")
     }
     
     ## ** n.resampling
@@ -280,7 +310,7 @@ testArgs <- function(name.call,
 
     n.operatorPerEndpoint <- tapply(operator, endpoint, function(x){length(unique(x))})
     if(any(n.operatorPerEndpoint>1)){
-        stop("Cannot have different operator for the same endpoint used at different priorities \n")
+        stop("Cannot have different operator for the same endpoint used at different priorities. \n")
     }
 
     ## ** seed
@@ -294,14 +324,14 @@ testArgs <- function(name.call,
      ## ** strata
     if (!is.null(strata)) {
         validNames(data,
-                   name1 = "strata",
+                   name1 = "data",
                    required.values = strata,
                    valid.length = NULL,
                    method = "BuyseTest")
 
        
         if(length(level.strata) != length(levels(strataC)) || any(level.strata != levels(strataC))){
-            stop("BuyseTest: wrong specification of \'strata\' \n",
+            stop("BuyseTest: wrong specification of \'strata\'. \n",
                  "different levels between Control and Treatment \n",
                  "levels(strataT) : ",paste(levels(strataT),collapse=" "),"\n",
                  "levels(strataC) : ",paste(levels(strataC),collapse=" "),"\n")
@@ -318,7 +348,7 @@ testArgs <- function(name.call,
 
     ## check threshold at 1/2 for binary endpoints
     if(any(threshold[type==1]!=1/2)){
-        stop("BuyseTest: wrong specification of \'threshold\' \n",
+        stop("BuyseTest: wrong specification of \'threshold\'. \n",
              "\'threshold\' must be 1/2 for binary endpoints (or equivalently NA) \n",
              "proposed \'threshold\' : ",paste(threshold[type==1],collapse=" "),"\n",
              "binary endpoint(s) : ",paste(endpoint[type==1],collapse=" "),"\n")
@@ -335,9 +365,9 @@ testArgs <- function(name.call,
     })
     
     if(any(vec.test>0)){   
-        stop("BuyseTest: wrong specification of \'endpoint\' or \'threshold\' \n",
-             "endpoints must be used with strictly decreasing threshold when re-used with lower priority \n",
-             "problematic endpoints: \"",paste0(names(vec.test)[vec.test>0], collapse = "\" \""),"\"\n")        
+        stop("BuyseTest: wrong specification of \'endpoint\' or \'threshold\'. \n",
+             "Endpoints must be used with strictly decreasing threshold when re-used with lower priority. \n",
+             "Problematic endpoints: \"",paste0(names(vec.test)[vec.test>0], collapse = "\" \""),"\"\n")        
     }
 
     ## ** trace
@@ -352,20 +382,21 @@ testArgs <- function(name.call,
                    method = "BuyseTest")
 
     validNames(data,
+               name1 = "data",          
                required.values = treatment,
                valid.length = NULL,
                method = "BuyseTest")
 
     if (length(level.treatment) != 2) {
-        stop("BuyseTest: wrong specification of \'treatment\' \n",
-             "the corresponding column in \'data\' must have exactly 2 levels \n",
-             "proposed levels : ",paste(level.treatment,collapse = " "),"\n")
+        stop("BuyseTest: wrong specification of \'treatment\'. \n",
+             "The corresponding column in \'data\' must have exactly 2 levels. \n",
+             "Proposed levels : ",paste(level.treatment,collapse = " "),"\n")
     }
 
     if(any(table(data[[treatment]])==0)){
         txt.stop <- names(which(table(data[[treatment]])==0))
-        stop("BuyseTest: wrong specification of \'data\' \n",
-             "no observation taking level ",txt.stop," in the treatment variable \n")
+        stop("BuyseTest: wrong specification of \'data\'. \n",
+             "No observation taking level ",txt.stop," in the treatment variable. \n")
         
     }
     

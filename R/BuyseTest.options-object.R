@@ -12,6 +12,7 @@
 #' \code{\link{BuyseTest.options}} to select or update global settings.
 #' 
 #' @keywords classes options BuyseTest.options-class
+#' @author Brice Ozenne
 
 ## * Class BuyseTest.options
 #' @rdname BuyseTest.options-class
@@ -24,21 +25,29 @@ setClass(
       conf.level = "numeric",
       correction.uninf = "numeric",
       cpus = "numeric",
+      debug = "numeric",
       hierarchical = "logical",
       keep.pairScore = "logical",
       keep.survival = "logical",      
       method.inference = "character",
       scoring.rule = "character",
       n.resampling = "numeric",
+      strata.resampling = "character",
       neutral.as.uninf = "logical",
       order.Hprojection = "numeric",
+      print.display = "character",
       statistic = "character",
+      summary.display = "list",
       trace = "numeric",
       transformation = "logical"
   ),
 
 ### ** Check validity of the object
   validity = function(object){
+      validNames.summary <- c("endpoint","threshold","weight","total","favorable","unfavorable","neutral","uninf","information(%)",
+                              "delta","Delta","Delta(%)",
+                              "p.value","CI","significance")
+      
       validCharacter(object@alternative,
                      name1 = "@alternative",
                      valid.values = c("two.sided","greater","less"),
@@ -63,6 +72,10 @@ setClass(
       validInteger(object@cpus,
                    name1 = "@cpus",
                    min = 1,
+                   valid.length = 1,
+                   method = "Class BuyseTest.options")
+      validInteger(object@debug,
+                   name1 = "@debug",
                    valid.length = 1,
                    method = "Class BuyseTest.options")
       validLogical(object@hierarchical,
@@ -94,6 +107,11 @@ setClass(
                    min = 0,
                    valid.length = 1,
                    method = "Class BuyseTest.options")
+      validCharacter(object@strata.resampling,
+                   name1 = "@n.resampling",
+                   valid.values = c(as.character(NA),"treatment","strata"),
+                   valid.length = 1,
+                   method = "Class BuyseTest.options")
       validLogical(object@neutral.as.uninf,
                    name1 = "@neutral.as.uninf",
                    valid.length = 1,
@@ -104,11 +122,21 @@ setClass(
                    max = 2,
                    valid.length = 1,
                    method = "Class BuyseTest.options")
+      validCharacter(object@print.display,
+                     name1 = "@print.display",
+                     valid.values = validNames.summary,
+                     valid.length = NULL,
+                     method = "Class BuyseTest.options")
       validCharacter(object@statistic,
                      name1 = "@statistic",
                      valid.values = c("netBenefit","winRatio"),
                      valid.length = 1,
                      method = "Class BuyseTest.options")
+      lapply(object@summary.display,validCharacter,
+             name1 = "@summary.display",
+             valid.values = validNames.summary,
+             valid.length = NULL,
+             method = "Class BuyseTest.options")
       validInteger(object@trace,
                    name1 = "@trace",
                    min = 0, max = 2,
@@ -140,13 +168,13 @@ setMethod(f = "alloc",
             name.field <- names(field)
             n.field <- length(field)
             
-            for (iField in 1:n.field) {
-              slot(object, name.field[iField]) <- field[[iField]]
-            }
-            
-            return(object)
+              for (iField in 1:n.field) {
+                  slot(object, name.field[iField]) <- field[[iField]]
+              }
+              validObject(object)
+              return(object)
           }
-)
+          )
 
 ## * Select BuyseTest.options
 #' @rdname BuyseTest.options-methods

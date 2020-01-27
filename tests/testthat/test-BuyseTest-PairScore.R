@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 26 2018 (14:33) 
 ## Version: 
-## Last-Updated: maj 15 2019 (18:29) 
+## Last-Updated: nov  8 2019 (11:54) 
 ##           By: Brice Ozenne
-##     Update #: 52
+##     Update #: 59
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -45,22 +45,24 @@ dt.sim[eventtime1 >= 1, time1 := 1]
 
 
 ## * test against tableComparison (no correction)
-formula <- Treatment ~ tte(time1, 0.5, status1) + cont(score1, 1) + bin(toxicity1) + tte(time1, 0.25, status1) + cont(score1, 0.5)
+formula <- treatment ~ tte(time1, status1, threshold = 0.5) + cont(score1, 1) + bin(toxicity1) + tte(time1, status1, threshold = 0.25) + cont(score1, 0.5)
 test_that("Full data - no correction", {
 
     BT.mixed <- BuyseTest(formula, data = dt.sim, scoring.rule = "Peron", correction.uninf = FALSE)
 
     expect_equal(as.double(BT.mixed@n.pairs),
-                 prod(table(dt.sim$Treatment)))
+                 prod(table(dt.sim$treatment)))
 
     manualScore <- NULL
-    for(iEndpoint in 1:length(BT.mixed@endpoint)){
+    for(iEndpoint in 1:length(BT.mixed@endpoint)){ ## iEndpoint <- 1
         iScore <- getPairScore(BT.mixed, endpoint = iEndpoint)[,.(favorable = sum(favorable*weight),
                                                                   unfavorable = sum(unfavorable*weight),
                                                                   neutral = sum(neutral*weight),
                                                                   uninf = sum(uninf*weight))]
         manualScore <- rbind(manualScore,iScore)
     }
+
+    ## check tablePairScore
     expect_equal(as.double(manualScore$favorable),
                  as.double(BT.mixed@count.favorable))
     expect_equal(as.double(manualScore$unfavorable),
@@ -74,29 +76,41 @@ test_that("Full data - no correction", {
                  as.double(BT.mixed@Delta.netBenefit))
     expect_equal(as.double(cumsum(BT.mixed@count.favorable)/cumsum(BT.mixed@count.unfavorable)),
                  as.double(BT.mixed@Delta.winRatio))
+
+    ## check number of pairs
+    D <- length(BT.mixed@endpoint)
+    vec.pair <- (BT.mixed@count.favorable+BT.mixed@count.unfavorable+BT.mixed@count.neutral+BT.mixed@count.uninf)
+    vec.RP <- (BT.mixed@count.neutral+BT.mixed@count.uninf)
+    expect_equal(as.double(vec.RP[-D]),as.double(vec.pair[-1]))
+    
 })
 
 ## * test against tableComparison (correction)
-formula <- Treatment ~ tte(time1, 0.5, status1) + cont(score1, 1) + bin(toxicity1) + tte(time1, 0.25, status1) + cont(score1, 0.5)
+formula <- treatment ~ tte(time1, status1, threshold = 0.5) + cont(score1, 1) + bin(toxicity1) + tte(time1, status1, threshold = 0.25) + cont(score1, 0.5)
 
 test_that("Full data", {
-
-    BT.mixed <- BuyseTest(formula,
-                          data = dt.sim, scoring.rule = "Peron", correction.uninf = TRUE)
+    BT.mixed <- BuyseTest(formula, data = dt.sim, scoring.rule = "Peron", correction.uninf = TRUE)
 
     expect_equal(as.double(BT.mixed@n.pairs),
-                 prod(table(dt.sim$Treatment)))
+                 prod(table(dt.sim$treatment)))
 
     manualScore <- NULL
-    for(iEndpoint in 1:length(BT.mixed@endpoint)){
+    for(iEndpoint in 1:length(BT.mixed@endpoint)){ ## iEndpoint <- 1
         iScore <- getPairScore(BT.mixed, endpoint = iEndpoint)[,.(favorable = sum(favorableC),
                                                                   unfavorable = sum(unfavorableC),
                                                                   neutral = sum(neutralC))]
         manualScore <- rbind(manualScore,iScore)
     }
 
+    ## check tablePairScore
     expect_equal(unname(BT.mixed@Delta.netBenefit),manualScore[,cumsum(favorable-unfavorable)]/BT.mixed@n.pairs)
     expect_equal(unname(BT.mixed@Delta.winRatio),manualScore[,cumsum(favorable)/cumsum(unfavorable)])
+
+    ## check number of pairs
+    D <- length(BT.mixed@endpoint)
+    vec.pair <- (BT.mixed@count.favorable+BT.mixed@count.unfavorable+BT.mixed@count.neutral+BT.mixed@count.uninf)
+    vec.RP <- (BT.mixed@count.neutral+BT.mixed@count.uninf)
+    expect_equal(as.double(vec.RP[-D]),as.double(vec.pair[-1]))
 })
 
 

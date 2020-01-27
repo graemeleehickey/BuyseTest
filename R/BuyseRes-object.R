@@ -10,7 +10,7 @@
 #' \code{\link{BuyseRes-summary}} for the summary of the BuyseTest function results
 #' 
 #' @keywords classes BuyseRes-class
-#' 
+#' @author Brice Ozenne
 
 ## * Class BuyseRes
 #' @rdname BuyseRes-class
@@ -35,6 +35,7 @@ setClass(
       level.strata = "vector",
       scoring.rule = "character",
       hierarchical = "logical",
+      neutral.as.uninf = "logical",
       correction.uninf = "numeric",
       method.inference = "character",
       strata = "vector",
@@ -47,7 +48,7 @@ setClass(
       covariance = "matrix",
       covarianceResampling = "array",
       weight = "numeric",
-      iid = "list",
+      iidAverage = "list",
       iidNuisance = "list",
       tablePairScore = "list",
       tableSurvival = "list"
@@ -75,6 +76,7 @@ methods::setMethod(
                                    level.treatment,
                                    scoring.rule,
                                    hierarchical,
+                                   neutral.as.uninf,
                                    correction.uninf,
                                    method.inference,
                                    strata,
@@ -87,8 +89,8 @@ methods::setMethod(
                                    covariance,
                                    covarianceResampling,
                                    weight,
-                                   iid_favorable,
-                                   iid_unfavorable,
+                                   iidAverage_favorable,
+                                   iidAverage_unfavorable,
                                    iidNuisance_favorable,
                                    iidNuisance_unfavorable,
                                    tablePairScore,
@@ -138,6 +140,7 @@ methods::setMethod(
                  .Object@level.treatment <- level.treatment
                  .Object@scoring.rule <- scoring.rule
                  .Object@hierarchical <- hierarchical
+                 .Object@neutral.as.uninf <- neutral.as.uninf
                  .Object@correction.uninf <- correction.uninf
                  .Object@method.inference <- method.inference
                  .Object@strata <- strata
@@ -162,13 +165,13 @@ methods::setMethod(
                  }
                  .Object@weight <- weight
                  
-                 .Object@iid <- list(favorable = iid_favorable,
-                                     unfavorable = iid_unfavorable)
-                 if(!is.null(.Object@iid[[1]])){
-                     colnames(.Object@iid[[1]]) <- name.endpoint
+                 .Object@iidAverage <- list(favorable = iidAverage_favorable,
+                                            unfavorable = iidAverage_unfavorable)
+                 if(!is.null(.Object@iidAverage[[1]])){
+                     colnames(.Object@iidAverage[[1]]) <- name.endpoint
                  }
-                 if(!is.null(.Object@iid[[2]])){
-                     colnames(.Object@iid[[2]]) <- name.endpoint
+                 if(!is.null(.Object@iidAverage[[2]])){
+                     colnames(.Object@iidAverage[[2]]) <- name.endpoint
                  }
                  .Object@iidNuisance <- list(favorable = iidNuisance_favorable,
                                              unfavorable = iidNuisance_unfavorable)

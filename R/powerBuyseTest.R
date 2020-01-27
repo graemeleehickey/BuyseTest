@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 26 2018 (12:57) 
 ## Version: 
-## Last-Updated: sep 11 2019 (17:18) 
+## Last-Updated: nov 21 2019 (11:50) 
 ##           By: Brice Ozenne
-##     Update #: 470
+##     Update #: 506
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -43,7 +43,7 @@
 #' Default value read from \code{BuyseTest.options()}.
 #' @param order.Hprojection [integer 1,2] the order of the H-project to be used to compute the variance of the net benefit/win ratio.
 #' @param ... parameters from \code{BuyseTest}.
-#' 
+#' @author Brice Ozenne
 
 ## * powerBuyseTest (examples)
 ##' @rdname powerBuyseTest
@@ -52,7 +52,7 @@
 ##' 
 ##' ## using simBuyseTest
 ##' powerBuyseTest(sim = simBuyseTest, sample.size = c(100), n.rep = 2,
-##'                formula = Treatment ~ bin(toxicity),
+##'                formula = treatment ~ bin(toxicity),
 ##'                method.inference = "u-statistic", trace = 4)
 ##'
 ##' ## using user defined simulation function
@@ -165,17 +165,6 @@ powerBuyseTest <- function(sim,
     outArgs$level.strata <- "1"
     outArgs$allstrata <- NULL
     
-    ## ** create weights matrix for survival endpoints
-    ## WARNING when updating code: names in the c() must precisely match output of initializeData, in the same order
-    out.name <- c("Wscheme","endpoint.UTTE","index.UTTE","D.UTTE","reanalyzed","outSurv")
-    outArgs[out.name] <- buildWscheme(scoring.rule = outArgs$scoring.rule,
-                                      endpoint = outArgs$endpoint,
-                                      D = outArgs$D,
-                                      D.TTE = outArgs$D.TTE,
-                                      n.strata = outArgs$n.strata,
-                                      type = outArgs$type,
-                                      threshold = outArgs$threshold)
-
     ## ** Display
     if (trace > 1) {
         cat("         Simulation study with BuyseTest \n\n")
@@ -186,9 +175,14 @@ powerBuyseTest <- function(sim,
                 do.call(printInference, args = outArgs)
             }
         }
-        
+        if(!missing(sample.size) && !is.null(sample.size)){
+            text.sample.size <- paste0("   - sample size: ",paste(sample.size, collapse = " "),"\n")
+        }else{
+            text.sample.size <- paste0("   - sample size: ",paste(sample.sizeC, collapse = " ")," (control)\n",
+                                       "                : ",paste(sample.sizeT, collapse = " ")," (treatment)\n")
+        }
         cat("Simulation\n",
-            "   - sample size: ",paste(sample.size, collapse = " "),"\n",
+            text.sample.size,
             "   - repetitions: ",n.rep,"\n",
             "   - cpus       : ",cpus,"\n",
             sep = "")
@@ -198,14 +192,14 @@ powerBuyseTest <- function(sim,
         
     }
     ## ** define environment
-    name.copy <- c("call", "sim", "option",
-                   "outArgs", "sample.sizeTmax", "sample.sizeCmax", "n.sample.size",
-                   "sample.size", "sample.sizeC", "sample.sizeT", "n.rep", "seed")
     envirBT <- new.env()
-    for(iObject in name.copy){ ## iObject <- name.copy[1]
+    ## envirBT[[deparse(call)]] <- sim
+    name.copy <- c("sim", "option",
+                   "outArgs", "sample.sizeTmax", "sample.sizeCmax", "n.sample.size",
+                   "sample.sizeC", "sample.sizeT", "n.rep", "seed")
+    for(iObject in name.copy){ ## iObject <- name.copy[2]
         envirBT[[iObject]] <- eval(parse(text = iObject))
     }
-
     ## ** warper
     warper <- function(i, envir){
         iOut <- matrix(NA, nrow = n.inference, ncol = 14,
@@ -216,20 +210,29 @@ powerBuyseTest <- function(sim,
         iOut[,"simulation"] <- i
 
         ## *** Initialize data
-        out.name <- c("data","M.endpoint","M.censoring",
+        out.name <- c("data","M.endpoint","M.status",
                       "index.C","index.T","index.strata",
-                      "index.endpoint","index.censoring","level.treatment","level.strata", "method.score",
-                      "n.strata","n.obs","n.obsStrata","cumn.obsStrata")
-
-        envir$outArgs[out.name] <- initializeData(data = do.call(eval(envir$call), args = list(n.T = sample.sizeTmax, n.C = sample.sizeCmax)),
+                      "level.treatment","level.strata", "method.score",
+                      "n.strata","n.obs","n.obsStrata","n.obsStrataResampling","cumn.obsStrataResampling","skeletonPeron",
+                      "scoring.rule", "iidNuisance", "nUTTE.analyzedPeron_M1", "endpoint.UTTE", "status.UTTE", "D.UTTE","index.UTTE")
+        envir$outArgs[out.name] <- initializeData(data = sim(n.T = sample.sizeTmax, n.C = sample.sizeCmax),
                                                   type = envir$outArgs$type,
                                                   endpoint = envir$outArgs$endpoint,
+                                                  Uendpoint = envir$outArgs$Uendpoint,
+                                                  D = envir$outArgs$D,
                                                   scoring.rule = envir$outArgs$scoring.rule,
-                                                  censoring = envir$outArgs$censoring,
+                                                  status = envir$outArgs$status,
+                                                  Ustatus = envir$outArgs$Ustatus,
+                                                  method.inference = envir$outArgs$method.inference,
                                                   operator = envir$outArgs$operator,
                                                   strata = envir$outArgs$strata,
                                                   treatment = envir$outArgs$treatment,
-                                                  copy = FALSE)
+                                                  hierarchical = envir$outArgs$hierarchical,
+                                                  copy = FALSE,
+                                                  endpoint.TTE = envir$outArgs$endpoint.TTE,
+                                                  status.TTE = envir$outArgs$status.TTE,
+                                                  iidNuisance = envir$outArgs$iidNuisance)
+        
 
         ## *** Point estimate
         outPoint <- .BuyseTest(envir = envir,
@@ -245,6 +248,7 @@ powerBuyseTest <- function(sim,
                               scoring.rule = envir$outArgs$scoring.rule,
                               method.inference = envir$outArgs$method.inference,
                               hierarchical = envir$outArgs$hierarchical,
+                              neutral.as.uninf = envir$outArgs$neutral.as.uninf,
                               correction.uninf = envir$outArgs$correction.uninf,
                               threshold = envir$outArgs$threshold,
                               weight = envir$outArgs$weight,
@@ -299,6 +303,7 @@ powerBuyseTest <- function(sim,
         }else{
             method.loop <- lapply
         }
+        
         ls.simulation <- do.call(method.loop,
                                  args = list(X = 1:n.rep,
                                              FUN = function(X){
@@ -336,11 +341,12 @@ powerBuyseTest <- function(sim,
             suppressPackageStartupMessages(library(BuyseTest, quietly = TRUE, warn.conflicts = FALSE, verbose = FALSE))
         })
         ## export functions
-        toExport <- c(".BuyseTest","initializeData","pairScore2dt","inferenceUstatistic","confint_Ustatistic", ".iid2cov", "validNumeric")
+        toExport <- c(".BuyseTest",".createSubBT","BuyseRes","initializeData","pairScore2dt","inferenceUstatistic","confint_Ustatistic", ".iid2cov", "validNumeric")
         
         i <- NULL ## [:forCRANcheck:] foreach
         ls.simulation <- foreach::`%dopar%`(
                                       foreach::foreach(i=1:n.block,
+                                                       .packages = "data.table",
                                                        .export = toExport),                                            
                                       {                                           
                                           if(trace>0){utils::setTxtProgressBar(pb, i)}
@@ -372,7 +378,7 @@ powerBuyseTest <- function(sim,
 
 ## * .createSubBT
 .createSubBT <- function(object, order,
-                         type, endpoint, level.treatment, scoring.rule, method.inference, hierarchical, correction.uninf,
+                         type, endpoint, level.treatment, scoring.rule, method.inference, hierarchical, neutral.as.uninf, correction.uninf,
                          threshold, weight,
                          sample.sizeT, sample.sizeC, n.sample.size){
 
@@ -493,6 +499,7 @@ powerBuyseTest <- function(sim,
                                   "0" = "Gehan",
                                   "1" = "Peron"),
             hierarchical = hierarchical,
+            neutral.as.uninf = neutral.as.uninf,
             correction.uninf = correction.uninf,
             method.inference = method.inference,
             strata = NULL,
@@ -506,8 +513,8 @@ powerBuyseTest <- function(sim,
             covarianceResampling = array(NA, dim = c(0,0,0)),
             covariance = iSigma,
             weight = weight,
-            iid_favorable = NULL,
-            iid_unfavorable = NULL,
+            iidAverage_favorable = NULL,
+            iidAverage_unfavorable = NULL,
             iidNuisance_favorable = NULL,
             iidNuisance_unfavorable = NULL,
             tablePairScore = list(),

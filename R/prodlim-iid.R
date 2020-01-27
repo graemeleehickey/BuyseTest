@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr  1 2019 (23:06) 
 ## Version: 
-## Last-Updated: maj 21 2019 (16:04) 
+## Last-Updated: nov 14 2019 (14:45) 
 ##           By: Brice Ozenne
-##     Update #: 87
+##     Update #: 101
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -32,7 +32,7 @@
 #' riskRegression: Predicting the Risk of an Event using Cox Regression Models.
 #' The R Journal (2017) 9:2, pages 440-460.
 #'
-#'
+#' @author Brice Ozenne
 
 ## * iidProdlim - examples
 #' @rdname iidProdlim
@@ -42,15 +42,10 @@
 #' 
 #' set.seed(10)
 #' dt <- simBuyseTest(10)
-#' setkeyv(dt, "Treatment")
+#' setkeyv(dt, "treatment")
 #' 
-#' e.KM <- prodlim(Hist(eventtime,status)~Treatment, data = dt)
+#' e.KM <- prodlim(Hist(eventtime,status)~treatment, data = dt)
 #' iidProdlim(e.KM)
-#'
-#'
-#' 
-#' 
-#'
 
 ## * iidProdlim - code
 #' @rdname iidProdlim
@@ -65,16 +60,17 @@ iidProdlim <- function(object, add0 = FALSE){
     }
     
     ## ** extract elements from object
-    is.strata <- !is.null(object$X)
-    strataVar <- names(object$X)
-    n.strataVar <- NCOL(object$X)
+    X <- object$X
+    is.strata <- !is.null(X)
+    strataVar <- names(X)
+    n.strataVar <- NCOL(X)
     
     if(is.strata){
-        n.strata <- NROW(object$X)
+        n.strata <- NROW(X)
     }else{
         n.strata <- 1
     }
-    level.strata <- as.character(interaction(object$X))
+    level.strata <- as.character(interaction(X))
     vec.strata <- factor(interaction(object$model.matrix[object$originalDataOrder,,drop=FALSE]), levels = level.strata)
 
     vec.strataNum <- as.numeric(vec.strata)
@@ -84,7 +80,7 @@ iidProdlim <- function(object, add0 = FALSE){
     ## ** Extract baseline hazard + number at risk
     ## baseline hazard
     df.strata <- do.call(rbind,lapply(1:n.strata, function(iS){
-        M <- matrix(object$X[iS,], ncol = n.strataVar, nrow = object$size.strata[iS], byrow = TRUE,
+        M <- matrix(X[iS,], ncol = n.strataVar, nrow = object$size.strata[iS], byrow = TRUE,
                     dimnames = list(NULL, strataVar))
         cbind("strata.index" = iS, data.frame(M, stringsAsFactors = FALSE))
     }))
@@ -153,6 +149,23 @@ iidProdlim <- function(object, add0 = FALSE){
         ## IFsurvival[[iStrata]][iSubsetObs,] <- sweep(-IFcumhazard[[iStrata]][iSubsetObs,], FUN = "*", STATS = iTableHazard$survival, MARGIN = 2)
     }
 
+    ## ** Modification used by BuyseTest to enable the user to easily specify model.tte
+    if(!is.null(object$XX) && !identical(object$X,object$XX)){
+        
+        oldlevel.strata <- level.strata
+        level.strata <- as.character(interaction(object$XX))
+
+        X <- object$XX
+
+        index.strata <- match(tableHazard.red[,interaction(.SD),.SDcols = names(object$X)],
+                              oldlevel.strata)
+        tableHazard.red[, c(names(object$X)) := NULL]        
+        tableHazard.red <- cbind(tableHazard.red[,.SD, .SDcols = "strata.index"],
+                                 object$XX[index.strata,,drop=FALSE],
+                                 tableHazard.red[,.SD, .SDcols = c("hazard","survival","time","event","atrisk")])
+        
+    }
+    
     ## ** Export
     return(list(IFhazard = IFhazard,
                 IFcumhazard = IFcumhazard,
@@ -160,7 +173,7 @@ iidProdlim <- function(object, add0 = FALSE){
                 time = ls.Utime1, 
                 etime.max = tableHazard[,max(.SD$time),by = "strata.index"][[2]],
                 label.strata = level.strata,
-                X = object$X,
+                X = X,
                 table = tableHazard.red
                 ))
 }

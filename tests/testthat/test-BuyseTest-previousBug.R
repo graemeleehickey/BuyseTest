@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: sep 10 2019 (10:34) 
+## Last-Updated: nov 21 2019 (11:57) 
 ##           By: Brice Ozenne
-##     Update #: 106
+##     Update #: 134
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -40,51 +40,52 @@ dt.sim <- data.table(
 
 test_that("number of pairs - argument neutral.as.uninf", {
 
-    for(iCorrection in c(FALSE,TRUE)){ ## iCorrection <- FALSE
-        BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,censoring=eventOS) + cont(Mgrade.tox,threshold=0),
+    for(iCorrection in c(FALSE,TRUE)){ ## iCorrection <- TRUE
+        BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = TRUE, scoring.rule = "Gehan", correction.uninf = iCorrection)
         BTS.T <- as.data.table(summary(BT.T, print = FALSE, percentage = FALSE)$table)
 
-        BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,censoring=eventOS) + cont(Mgrade.tox,threshold=0),
+        BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = FALSE, scoring.rule = "Gehan", correction.uninf = iCorrection)
         BTS.F <- as.data.table(summary(BT.F, print = FALSE, percentage = FALSE)$table)
 
         ## neutral.as.uninf does not impact the results for first endpoint
-        expect_equal(BTS.T[1,],BTS.F[1,])
+        expect_equal(BTS.T[1,c("favorable","unfavorable","neutral","uninf","delta","Delta")],
+                     BTS.F[1,c("favorable","unfavorable","neutral","uninf","delta","Delta")])
 
         ## check consistency of the number of pairs
         ## neutral.as.uninf = TRUE
         ## summary(BT.T)
-        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", n.favorable+n.unfavorable+n.neutral+n.uninf],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", n.total])
-        expect_equal(BTS.T[endpoint == "timeOS" & strata == "global", n.neutral+n.uninf],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", n.total])
-        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", n.total],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", n.favorable+n.unfavorable+n.neutral+n.uninf])
+        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf],
+                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", total])
+        expect_equal(BTS.T[endpoint == "timeOS" & strata == "global", neutral+uninf],
+                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", total])
+        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", total],
+                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf])
 
         ## neutral.as.uninf = FALSE
-        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", n.favorable+n.unfavorable+n.neutral+n.uninf],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", n.total])
-        expect_equal(BTS.F[endpoint == "timeOS" & strata == "global", n.uninf],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", n.total])
-        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", n.total],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", n.favorable+n.unfavorable+n.neutral+n.uninf])
+        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf],
+                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", total])
+        expect_equal(BTS.F[endpoint == "timeOS" & strata == "global", uninf],
+                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", total])
+        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", total],
+                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf])
 
         ## compared to known value
         if(iCorrection == FALSE){
-            keep.col <- c("endpoint","threshold","strata","weight","pc.total","pc.favorable","pc.unfavorable","pc.neutral","pc.uninf","delta","Delta")
+            keep.col <- c("endpoint","threshold","strata","weight","total","favorable","unfavorable","neutral","uninf","delta","Delta")
             test <- as.data.table(summary(BT.T, print = FALSE)$table[,keep.col])
             GS <- data.table("endpoint" = c("timeOS", "timeOS", "Mgrade.tox", "Mgrade.tox"), 
                              "threshold" = c(1e-12, 1e-12, 1e-12, 1e-12), 
                              "strata" = c("global", "1", "global", "1"),
                              "weight" = c(1, 1, 1, 1), 
-                             "pc.total" = c(100.00000, 100.00000,  44.44444,  44.44444), 
-                             "pc.favorable" = c(44.44444, 44.44444, 22.22222, 22.22222), 
-                             "pc.unfavorable" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                             "pc.neutral" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                             "pc.uninf" = c(33.33333, 33.33333,  0.00000,  0.00000), 
+                             "total" = c(100.00000, 100.00000,  44.44444,  44.44444), 
+                             "favorable" = c(44.44444, 44.44444, 22.22222, 22.22222), 
+                             "unfavorable" = c(11.11111, 11.11111, 11.11111, 11.11111), 
+                             "neutral" = c(11.11111, 11.11111, 11.11111, 11.11111), 
+                             "uninf" = c(33.33333, 33.33333,  0.00000,  0.00000), 
                              "delta" = c(0.3333333, 0.3333333, 0.1111111, 0.1111111), 
                              "Delta" = c(0.3333333, NA, 0.4444444, NA))
             ##    butils::object2script(test)
@@ -95,12 +96,6 @@ test_that("number of pairs - argument neutral.as.uninf", {
             ## class(GS[["n.resampling"]])
         }
     }
-
-
-
-    
-
-    
 })
 
 ## * Emeline T: samedi 26 mai 2018 à 14:39 (Version 1.0)
@@ -116,7 +111,7 @@ BT_tau0 <- BuyseTest(data=data,
                      endpoint="time",
                      type="timeToEvent",
                      threshold=as.numeric(0),
-                     censoring="event",
+                     status="event",
                      scoring.rule="Peron",
                      method.inference = "none",
                      cpus=1)
@@ -129,17 +124,17 @@ data(veteran,package="survival")
 
 test_that("ordering of tied event does not affect BuyseTest", {
     ## veteran2[veteran2$time==100,]
-    BT.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                         data = veteran, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     veteran1 <- veteran[order(veteran$time,veteran$status),c("time","status","trt")]
     ## veteran1[veteran2$time==100,]
-    BT1.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT1.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                          data = veteran1, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     veteran2 <- veteran[order(veteran$time,-veteran$status),c("time","status","trt")]
     ## ## veteran2[veteran2$time==100,]
-    BT2.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT2.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                          data = veteran2, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     ## effect of the ordering
@@ -202,7 +197,7 @@ test_that("Multiple thresholds",{
                              endpoint=c("Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time"),
                              treatment="group",
                              type=c("TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE"),
-                             censoring=c("Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event"),
+                             status=c("Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event"),
                              threshold=c(42,39,36,33,30,27,24,21,18,15,12,9,6,3,0),
                              n.resampling=500,
                              trace=0,
@@ -213,8 +208,8 @@ test_that("Multiple thresholds",{
     resS <- as.data.table(summary(BuyseresPer, print = FALSE)$table)
 
     ## pairs are correctly transfered from one endpoint to another
-    expect_equal(resS[strata == "global" & threshold > tail(threshold,1), pc.neutral +  pc.uninf],
-                 resS[strata == "global" & threshold < threshold[1], pc.total], tol = 1e-2)
+    expect_equal(resS[strata == "global" & threshold > tail(threshold,1), neutral + uninf],
+                 resS[strata == "global" & threshold < threshold[1], total], tol = 1e-2)
 
     ## butils::object2script(as.double(BuyseresPer@count.favorable), digit = 2)
     GS <- c(260.64, 35.93, 37.33, 147.32, 272.14, 263.6, 235.7, 213.21, 390.29, 408.73, 514.7, 514.34, 744.78, 865.21, 1095.26)
@@ -236,101 +231,6 @@ test_that("Multiple thresholds",{
     expect_equal(as.double(BuyseresPer@delta.winRatio), GS, tol = 1e-3)
 })
 
-
-## * Brice: 12/10/18 3:02 (Wscheme)
-
-BuyseTest_buildWscheme <- BuyseTest:::buildWscheme
-## BuyseTest_buildWscheme <- buildWscheme
-
-endpoint <- c("time","time","time")
-threshold <- c(3:1)
-D <- length(endpoint)
-type <- rep(3, D)
-D.TTE <- sum(type==3)
-
-test_that("Wscheme: 3 times the same endpoint",{
-    Wtest <- BuyseTest_buildWscheme(scoring.rule = 1,
-                                    endpoint = endpoint,
-                                    D.TTE = D.TTE,
-                                    D = D,
-                                    type = type,
-                                    n.strata = 1,
-                                    threshold = threshold)
-
-    ## butils::object2script(Wtest$Wscheme)
-    GS <- list(Wscheme = matrix(c(NA, NA, NA, 0, NA, NA, 0, 0, NA),
-                                nrow = 3, ncol = 3,
-                                dimnames = list(c("weigth of time(3)", "weigth of time(2)", "weigth of time(1)"),
-                                                c("for time(3)", "for time(2)", "for time(1)")) ),
-               endpoint.UTTE = "time",
-               index.UTTE = c(0,0,0),
-               D.UTTE = 1,
-               reanalyzed = c(TRUE, TRUE, FALSE) )
-
-    expect_equal(Wtest[c("Wscheme","endpoint.UTTE","index.UTTE","D.UTTE","reanalyzed")], GS)
-})
-
-endpoint <- c("time","time1","time","time","time2","time1")
-threshold <- c(6:1)
-D <- length(endpoint)
-type <- rep(3, D)
-D.TTE <- sum(type==3)
-
-test_that("Wscheme: 6 tte endpoint",{
-    Wtest <- BuyseTest_buildWscheme(scoring.rule = 1,
-                                    endpoint = endpoint,
-                                    D.TTE = D.TTE,
-                                    D = D,
-                                    type = type,
-                                    n.strata = 1,
-                                    threshold = threshold)
-
-    ## butils::object2script(Wtest)
-    GS <- list(Wscheme = matrix(c(NA, NA, NA, NA, NA, NA, 1, NA, NA, NA, NA, NA, 0, 1, NA, NA, NA, NA, 0, 1, 0, NA, NA, NA, 0, 1, 0, 1, NA, NA, 0, 0, 0, 1, 1, NA), 
-                                nrow = 6, 
-                                ncol = 6, 
-                                dimnames = list(c("weigth of time(6)", "weigth of time1(5)", "weigth of time(4)", "weigth of time(3)", "weigth of time2(2)", "weigth of time1(1)"),
-                                                c("for time(6)", "for time1(5)", "for time(4)", "for time(3)", "for time2(2)", "for time1(1)")) 
-                                ),
-               endpoint.UTTE = c("time","time1","time2"),
-               index.UTTE = c(0,1,0,0,2,1),
-               D.UTTE = 3,
-               reanalyzed = c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE) )
-
-    expect_equal(Wtest[c("Wscheme","endpoint.UTTE","index.UTTE","D.UTTE","reanalyzed")], GS)
-})
-
-endpoint <- c("time","bin","bin","time","bin","time")
-threshold <- c(6:1)
-D <- length(endpoint)
-type <- 1+(endpoint=="time")*2
-D.TTE <- sum(type==3)
-
-test_that("Wscheme: 6 mixed endpoint",{
-    Wtest <- BuyseTest_buildWscheme(scoring.rule = 1,
-                                    endpoint = endpoint,
-                                    D.TTE = D.TTE,
-                                    D = D,
-                                    type = type,
-                                    n.strata = 1,
-                                    threshold = threshold)
-
-    ## butils::object2script(Wtest)
-    GS <- list(Wscheme = matrix(c(NA, NA, NA, NA, NA, NA, 1, NA, NA, NA, NA, NA, 1, 1, NA, NA, NA, NA, 0, 1, 1, NA, NA, NA, 0, 1, 1, 1, NA, NA, 0, 1, 1, 0, 1, NA), 
-                                nrow = 6, 
-                                ncol = 6, 
-                                dimnames = list(c("weigth of time(6)", "weigth of bin(5)", "weigth of bin(4)", "weigth of time(3)", "weigth of bin(2)", "weigth of time(1)"),
-                                                c("for time(6)", "for bin(5)", "for bin(4)", "for time(3)", "for bin(2)", "for time(1)")) 
-                                ),
-               endpoint.UTTE = "time",
-               index.UTTE = c(0,-1,-1,0,-1,0),
-               D.UTTE = 1,
-               reanalyzed = c(TRUE, TRUE, TRUE, TRUE, FALSE, FALSE) )
-
-    expect_equal(Wtest[c("Wscheme","endpoint.UTTE","index.UTTE","D.UTTE","reanalyzed")], GS)
-})
-
-
 ## * Brice: 30/10/18 4:36 Neutral pairs with 0 threshold
 df <- data.frame("survie" = c(2.1, 4.1, 6.1, 8.1, 4, 6, 8, 10),
                  "event" = c(1, 1, 1, 0, 1, 0, 0, 1),
@@ -338,7 +238,7 @@ df <- data.frame("survie" = c(2.1, 4.1, 6.1, 8.1, 4, 6, 8, 10),
                  "score" = 1)
 
 test_that("1 TTE endpoint - Gehan (no correction)", {
-    Peron <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 0),
+    Peron <- BuyseTest(group ~ tte(survie, status = event, threshold = 0),
                        data = df, 
                        scoring.rule = "Peron", correction.uninf = FALSE)
 
@@ -355,8 +255,8 @@ set.seed(1)
 dt <- simBuyseTest(50)
 
 test_that("same p.value (permutation test) for winRatio and net Benefit", {
-    e.perm <- BuyseTest(Treatment ~ bin(toxicity), data = dt,
-                        method.inference = "permutation", n.resampling = 100)
+    e.perm <- BuyseTest(treatment ~ bin(toxicity), data = dt,
+                        method.inference = "permutation", n.resampling = 100, trace = 0)
     netBenefit.perm <- confint(e.perm, statistic = "netBenefit")
     winRatio.perm <- confint(e.perm, statistic = "winRatio")
 
@@ -392,10 +292,10 @@ df <- rbind(data.frame(score = rep(1,5),
 
 test_that("BuyseTest without variability", {
     e.BT_ustat <- BuyseTest(group ~ bin(tox) + cont(score), data = df,
-                            method.inference = "u-statistic")
+                            method.inference = "u-statistic", trace = 0)
     e.BT_boot <- BuyseTest(group ~ bin(tox) + cont(score), data = df,
                            method.inference = "studentized bootstrap",
-                           n.resampling = 10)
+                           n.resampling = 10, trace = 0)
 
     confintTempo <- confint(e.BT_ustat)
     expect_equal(unname(confintTempo[,"p.value"]),1:0)
@@ -406,10 +306,77 @@ test_that("BuyseTest without variability", {
 ## * graemeleehickey (issue #2 on Github): 8 september 2019 p-value bootstrap
 test_that("Boostrap - issue in the summary", {
     data(veteran,package="survival")
-    BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, censoring = "status") + cont(karno),
+    BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                          data = veteran, keep.pairScore = TRUE, scoring.rule = "Gehan", 
                          trace = 0, method.inference = "bootstrap", n.resampling = 20, seed = 10)
     summary(BT.keep, statistic = "winRatio")
 })
 
+## * graemeleehickey (issue #3 on Github): 22 september 2019 BuysePower
+test_that("BuysePower - error in print", {
+    simFCT <- function(n.C, n.T){
+        out <- data.table(Y=rnorm(n.C+n.T),
+                          T=c(rep(1,n.C),rep(0,n.T))
+                          )
+        return(out)
+    }
 
+    ## the error was when setting trace to 4
+    xx <- powerBuyseTest(sim = simFCT, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
+                   formula = T ~ cont(Y), method.inference = "u-statistic", trace = 4)
+
+    yy <- powerBuyseTest(sim = function(n.C, n.T){
+        out <- data.table(Y=rnorm(n.C+n.T),
+                          T=c(rep(1,n.C),rep(0,n.T))
+                          )
+        return(out)
+    }, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
+    formula = T ~ cont(Y), method.inference = "u-statistic", trace = 0)
+
+    expect_equal(xx,yy)
+
+    ## xx <- powerBuyseTest(sim = simFCT,
+    ##                      sample.sizeC = c(100),
+    ##                      sample.sizeT = c(100),
+    ##                      n.rep = 10,
+    ##                      cpus = 3,
+    ##                      formula = T ~ cont(Y),
+    ##                      method.inference = "u-statistic",
+    ##                      trace = 4)
+
+})
+
+## * brice ozenne: 11/13/19 4:11 hierachical in BuyseTest
+test_that("BuyseTest - hierarchical", {
+    data(veteran, package = "survival")
+    BT.nH <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno, threshold = 0),
+                       hierarchical = FALSE, data = veteran, 
+                       method.inference = "none", trace = 0)
+    expect_equal(coef(BT.nH),
+                 c("time_20" = -0.08765836, "karno_1e-12" = -0.11898828),
+                 tol = 1e-6)
+
+})
+
+## * graemeleehickey (issue #4 on Github): 6 october 2019 simBuyseTest
+test_that("simBuyseTest - rate vs. scale", {
+    n <- 1e5
+    rate <- 5
+
+    args <- list(rates.T = rate, rates.Censoring.T = rate+1,
+                 rates.C = rate, rates.Censoring.C = rate+1,
+                 rates.CR =  rate)
+    set.seed(10)
+    test <- simBuyseTest(1e4, argsBin = NULL, argsCont = NULL, argsTTE = args,
+                       latent = TRUE)
+    
+    set.seed(10)
+    GS <- rexp(n, rate = rate)
+    GS1 <- rexp(n, rate = rate+1)
+
+    expect_equal(mean(GS),mean(test[treatment == "C", mean(eventtimeUncensored)]), tol = 1e-2)
+    expect_equal(mean(GS),mean(test[treatment == "T", mean(eventtimeUncensored)]), tol = 1e-2)
+
+    expect_equal(mean(GS1),mean(test[treatment == "C", mean(eventtimeCensoring)]), tol = 1e-2)
+    expect_equal(mean(GS1),mean(test[treatment == "T", mean(eventtimeCensoring)]), tol = 1e-2)
+})

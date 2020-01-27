@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 30 2018 (23:45) 
 ## Version: 
-## Last-Updated: maj 23 2019 (09:45) 
+## Last-Updated: nov 21 2019 (11:55) 
 ##           By: Brice Ozenne
-##     Update #: 103
+##     Update #: 110
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -36,7 +36,7 @@ df <- data.frame("survie" = c(2.1, 4.1, 6.1, 8.1, 4, 6, 8, 10),
 
 ## ** Gehan
 test_that("1 TTE endpoint - Gehan (no correction)", {
-    Gehan <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 1) + cont(score),
+    Gehan <- BuyseTest(group ~ tte(survie, status = event, threshold = 1) + cont(score),
                        data = df,
                        scoring.rule = "Gehan", correction.uninf = FALSE)
 
@@ -57,10 +57,11 @@ test_that("1 TTE endpoint - Gehan (no correction)", {
 
 test_that("1 TTE endpoint - Gehan (correction at the pair level)", {
     ## survival first    
-    GehanC <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 1) + cont(score),
+    GehanC <- BuyseTest(group ~ tte(survie, status = event, threshold = 1) + cont(score),
                         data = df, 
                         scoring.rule = "Gehan", correction.uninf = TRUE)
     ## getPairScore(GehanC)
+    ## summary(GehanC)
     
     expect_equal(as.double(GehanC@count.favorable), c(12,0))
     expect_equal(as.double(GehanC@count.unfavorable), c(2+2/3,0))
@@ -79,7 +80,7 @@ test_that("1 TTE endpoint - Gehan (correction at the pair level)", {
 
 test_that("1 TTE endpoint - Gehan (correction IPCW)", {
     ## survival first    
-    GehanC <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 1) + cont(score),
+    GehanC <- BuyseTest(group ~ tte(survie, status = event, threshold = 1) + cont(score),
                         data = df, 
                         scoring.rule = "Gehan", correction.uninf = 2)
 
@@ -97,7 +98,7 @@ test_that("1 TTE endpoint - Gehan (correction IPCW)", {
     expect_equal(as.double(GehanC@Delta.winRatio[1]),iScoreS[,sum(favorable*factor)/sum(unfavorable*factor)])
 
     ## survival second
-    GehanC2 <- BuyseTest(group ~  cont(score) + tte(survie, censoring = event, threshold = 1),
+    GehanC2 <- BuyseTest(group ~  cont(score) + tte(survie, status = event, threshold = 1),
                          data = df, 
                          scoring.rule = "Gehan", correction.uninf = 2)
     
@@ -117,7 +118,7 @@ test_that("1 TTE endpoint - Gehan (correction IPCW)", {
 ## ** Peron
 test_that("1 TTE endpoint - Peron (no correction)", {
 
-    Peron <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 1) + cont(score),
+    Peron <- BuyseTest(group ~ tte(survie, status = event, threshold = 1) + cont(score),
                        data = df, 
                        scoring.rule = "Peron", correction.uninf = FALSE)
 
@@ -137,7 +138,7 @@ test_that("1 TTE endpoint - Peron (no correction)", {
     
 test_that("1 TTE endpoint - Peron (IPCW)", {
     ## survival first
-    PeronC <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 1) + cont(score),
+    PeronC <- BuyseTest(group ~ tte(survie, status = event, threshold = 1) + cont(score),
                         data = df, 
                         scoring.rule = "Peron", correction.uninf = 2)
 
@@ -156,7 +157,7 @@ test_that("1 TTE endpoint - Peron (IPCW)", {
     expect_equal(as.double(PeronC@Delta.winRatio[1]),iScoreS[,sum(favorable*factor)/cumsum(unfavorable*factor)])
 
     ## survival second
-    PeronC2 <- BuyseTest(group ~  cont(score) + tte(survie, censoring = event, threshold = 1),
+    PeronC2 <- BuyseTest(group ~  cont(score) + tte(survie, status = event, threshold = 1),
                          data = df, 
                          scoring.rule = "Peron", correction.uninf = 2)
     
@@ -189,7 +190,7 @@ dt[trt==1, Y2 := as.numeric(1-C)]
 
 ## table(dt$trt,dt$Y1,dt$Y2)
 
-test_that("2 TTE endpoint - IPW induces bias when censoring is correlated with 2nd endpoint", {
+test_that("2 endpoints - IPW induces bias when censoring is correlated with 2nd endpoint", {
     BT.all <- BuyseTest(trt ~ cont(Y1, threshold = 1) + bin(Y2), data = dt,
                         correction.uninf = 0, method.inference = "none")
     expect_equal(as.double(BT.all@count.favorable), c(0,4))
@@ -220,5 +221,34 @@ test_that("2 TTE endpoint - IPW induces bias when censoring is correlated with 2
 
 })
 
+## ** time to event variables
+set.seed(10)
+dt.sim <- simBuyseTest(n.T = 20,
+                       n.C = 20)
+test_that("2 TTE endpoints - check consistency across threshold when using corrections", {
+    e.BT2 <- BuyseTest(treatment ~ tte(eventtime,status,1)  + tte(eventtime,status,0.75) + tte(eventtime,status,0.5),
+                       correction.uninf = 1, data = dt.sim)
+    e.BT1 <- BuyseTest(treatment ~ tte(eventtime,status,0.5),
+                       correction.uninf = 1, data = dt.sim)
+    expect_equal(sum(e.BT2@count.favorable),e.BT1@count.favorable[1,1])
+    expect_equal(sum(e.BT2@count.unfavorable),e.BT1@count.unfavorable[1,1])
+    expect_equal(e.BT2@count.neutral[1,3],e.BT1@count.neutral[1,1])
+    expect_equal(e.BT2@count.uninf[1,3],e.BT1@count.uninf[1,1])
+
+    e.BT2 <- BuyseTest(treatment ~ tte(eventtime,status,1)  + tte(eventtime,status,0.75) + tte(eventtime,status,0.5),
+                       correction.uninf = 2, data = dt.sim)
+    e.BT1 <- BuyseTest(treatment ~ tte(eventtime,status,0.5),
+                       correction.uninf = 2, data = dt.sim)
+    expect_equal(sum(e.BT2@count.favorable),e.BT1@count.favorable[1,1])
+    expect_equal(sum(e.BT2@count.unfavorable),e.BT1@count.unfavorable[1,1])
+    expect_equal(e.BT2@count.neutral[1,3],e.BT1@count.neutral[1,1])
+    expect_equal(e.BT2@count.uninf[1,3],e.BT1@count.uninf[1,1])
+})
+
+test_that("TTE,cont,TTE endpoints - check consistency across threshold when using corrections", {
+    e.BT2 <- BuyseTest(treatment ~ tte(eventtime,status,1)  + cont(score,1) + tte(eventtime,status,0.5),
+                       correction.uninf = 1, data = dt.sim)
+    expect_equal(e.BT2@count.neutral[1,2],(e.BT2@count.favorable[1,3]+e.BT2@count.unfavorable[1,3]+e.BT2@count.neutral[1,3]))
+})
 ##----------------------------------------------------------------------
 ### test-BuyseTest-correctionTTE.R ends here

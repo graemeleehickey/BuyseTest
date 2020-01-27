@@ -6,23 +6,21 @@
 #' @name GPC_cpp
 #' 
 #' @param endpoint A matrix containing the values of each endpoint (in columns) for each observation (in rows). 
-#' @param censoring A matrix containing the values of the censoring variables relative to each endpoint (in columns) for each observation (in rows).
-#' @param indexC A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the control observations. Not unique when bootstraping.
+#' @param status A matrix containing the values of the status variables relative to each endpoint (in columns) for each observation (in rows).
+#' @param indexC A list containing, for each strata, which rows of the endpoint and status matrices corresponds to the control observations. Not unique when bootstraping.
 #' @param posC A list containing, for each strata, the unique identifier of each control observations. 
-#' @param indexT A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the treatment observations. Not unique when bootstraping.
+#' @param indexT A list containing, for each strata, which rows of the endpoint and status matrices corresponds to the treatment observations. Not unique when bootstraping.
 #' @param posT A list containing, for each strata, the unique identifier of each treatment observations.
 #' @param threshold Store the thresholds associated to each endpoint. Must have length D. The threshold is ignored for binary endpoints. 
 #' @param weight Store the weight associated to each endpoint. Must have length D. 
 #' @param method The index of the method used to score the pairs. Must have length D. 1 for continuous, 2 for Gehan, and 3 for Peron.
 #' @param D The number of endpoints.
+#' @param D_UTTE The number of distinct time to event endpoints.
 #' @param n_strata The number of strata. 
-#' @param n_TTE The number of time-to-event endpoints. 
-#' @param n_UTTE The number of unique time-to-event endpoints.
-#' @param Wscheme The matrix describing the weighting strategy. For each endpoint (except the first) in column, weights of each pair are initialized at 1 and multiplied by the weight of the endpoints in rows where there is a 1. Must have D lines and D columns.
+#' @param nUTTE_analyzedPeron_M1 The number of unique time-to-event endpoints that have been analyzed the Peron scoring rule before the current endpoint. Must have length D.
 #' @param index_endpoint The position of the endpoint at each priority in the argument endpoint. Must have length D. 
-#' @param index_censoring The position of the censoring at each priority in the argument censoring. Must have length D. 
+#' @param index_status The position of the status at each priority in the argument status. Must have length D. 
 #' @param index_UTTE The position, among all the unique tte endpoints, of the TTE endpoints. Equals -1 for non tte endpoints. Must have length n_TTE. 
-#' @param reanalyzed Will this endpoint be re-analyzed latter with a different threshold.
 #' @param list_survTimeC A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the control group (in rows).
 #' @param list_survTimeT A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the treatment group (in rows).
 #' @param list_survJumpC A list of matrix containing the survival estimates and survival jumps when the survival for the control arm jumps.
@@ -32,25 +30,27 @@
 #' @param p_T Number of nuisance parameter in the survival model for the treatment group, for each endpoint and strata
 #' @param iid_survJumpC A list of matrix containing the iid of the survival estimates in the control group.
 #' @param iid_survJumpT A list of matrix containing the iid of the survival estimates in the treatment group.
+#' @param zeroPlus Value under which doubles are considered 0?
 #' @param correctionUninf Should the uninformative weight be re-distributed to favorable and unfavorable?
 #' @param hierarchical Should only the uninformative pairs be analyzed at the lower priority endpoints (hierarchical GPC)? Otherwise all pairs will be compaired for all endpoint (full GPC).
 #' @param hprojection Order of the H-projection used to compute the variance.
 #' @param neutralAsUninf Should paired classified as neutral be re-analyzed using endpoints of lower priority? 
 #' @param keepScore Should the result of each pairwise comparison be kept?
-#' @param reserve Should vector storing neutral pairs and uninformative pairs be initialized at their maximum possible length?
 #' @param returnIID Should the iid be computed?
+#' @param debug Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).
 #' @keywords function Cpp BuyseTest
+#' @author Brice Ozenne
 NULL
 
 #' @name GPC_cpp
 #' @export
-GPC_cpp <- function(endpoint, censoring, indexC, posC, indexT, posT, threshold, weight, method, D, n_strata, n_TTE, n_UTTE, Wscheme, index_endpoint, index_censoring, index_UTTE, reanalyzed, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, reserve, returnIID) {
-    .Call(`_BuyseTest_GPC_cpp`, endpoint, censoring, indexC, posC, indexT, posT, threshold, weight, method, D, n_strata, n_TTE, n_UTTE, Wscheme, index_endpoint, index_censoring, index_UTTE, reanalyzed, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, reserve, returnIID)
+GPC_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug) {
+    .Call(`_BuyseTest_GPC_cpp`, endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug)
 }
 
-#' @title C++ Function Computing the Integral Terms for the Peron Method. 
+#' @title C++ Function Computing the Integral Terms for the Peron Method in the survival case. 
 #' @description Compute the integral with respect to the jump in survival for pairs where both outcomes are censored.
-#' @name calcIntegralScore_cpp
+#' @name calcIntegralSurv_cpp
 #' 
 #' @param survival [matrix] Contains the jump times in the first column,
 #' the survival in the other arm at times plus threshold in the second column,
@@ -64,8 +64,30 @@ GPC_cpp <- function(endpoint, censoring, indexC, posC, indexT, posT, threshold, 
 #' @param derivSurvD [matrix] matrix column filled of 0 whose number of rows is the number of parameters of the survival used to compute the jumps.
 #'
 #' @keywords function Cpp internal
+#' @author Brice Ozenne
 #' @export
-calcIntegralScore_cpp <- function(survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD) {
-    .Call(`_BuyseTest_calcIntegralScore_cpp`, survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD)
+calcIntegralSurv_cpp <- function(survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD) {
+    .Call(`_BuyseTest_calcIntegralSurv_cpp`, survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD)
+}
+
+#' @title C++ Function Computing the Integral Terms for the Peron Method in the presence of competing risks (CR).
+#' @description Compute the integral with respect to the jump in CIF for pairs where both outcomes are censored.
+#' @name calcIntegralCif_cpp
+#'
+#' @param cif [matrix] cif[1] = jump times in control group (event of interest), cif[2-3] = CIF of event of interest in group
+#' T at times - tau and times + tau, cif[4] : jump in cif of control group at times (event of interest).
+#' @param start_val [numeric] Time at which to start the integral.
+#' @param stop_val [numeric] Time at which to stop the integral.
+#' @param CIF_t [numeric] CIF of event of interest in group T evaluated at observed time of treatment patient.
+#' @param lastCIF [numeric, >0] last value of CIF of event type 1 in group T.
+#' @param type [numeric] Indicates the type of integral to compute (1 for wins, 2 for losses, 3 for neutral pairs with two
+#' events of interest - integral with t+tau and xi - and 4 for neutral pairs with two events of interest - integral with
+#' t+tau and t-tau).
+#'
+#' @keywords function Cpp internal
+#' @author Eva Cantagallo
+#' @export
+calcIntegralCif_cpp <- function(cif, start_val, stop_val, CIF_t, lastCIF, type) {
+    .Call(`_BuyseTest_calcIntegralCif_cpp`, cif, start_val, stop_val, CIF_t, lastCIF, type)
 }
 

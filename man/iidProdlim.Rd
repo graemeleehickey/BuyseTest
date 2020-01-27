@@ -24,18 +24,16 @@ library(prodlim)
 
 set.seed(10)
 dt <- simBuyseTest(10)
-setkeyv(dt, "Treatment")
+setkeyv(dt, "treatment")
 
-e.KM <- prodlim(Hist(eventtime,status)~Treatment, data = dt)
+e.KM <- prodlim(Hist(eventtime,status)~treatment, data = dt)
 iidProdlim(e.KM)
-
-
-
-
-
 }
 \references{
 Brice Ozenne, Anne Lyngholm Sorensen, Thomas Scheike, Christian Torp-Pedersen and Thomas Alexander Gerds.
 riskRegression: Predicting the Risk of an Event using Cox Regression Models.
 The R Journal (2017) 9:2, pages 440-460.
+}
+\author{
+Brice Ozenne
 }
