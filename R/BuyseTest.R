@@ -1,9 +1,9 @@
 ## * Documentation - BuyseTest
 #' @name BuyseTest
 #' @title Generalized Pairwise Comparisons (GPC)
-#' @aliases BuyseTest
 #' 
 #' @description Performs Generalized Pairwise Comparisons for binary, continuous and time-to-event endpoints.
+#' 
 #' @param formula [formula] a symbolic description of the GPC model,
 #' typically \code{treatment ~ type1(endpoint1) + type2(endpoint2, threshold2) + strata}.
 #' See Details, section "Specification of the GPC model".
@@ -19,7 +19,7 @@
 #' @param model.tte [list] optional survival models relative to each time to each time to event endpoint.
 #' Models must \code{prodlim} objects and stratified on the treatment and strata variable. When used, the uncertainty from the estimates of these survival models is ignored.
 #' @param method.inference [character] method used to compute confidence intervals and p-values.
-#' Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"bootstrap"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
+#' Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"studentized permutation"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
 #' See Details, section "Statistical inference".
 #' @param n.resampling [integer] the number of permutations/samples used for computing the confidence intervals and the p.values. 
 #' See Details, section "Statistical inference".
@@ -32,7 +32,7 @@
 #' @param neutral.as.uninf [logical] should paired classified as neutral be re-analyzed using endpoints of lower priority (as it is done for uninformative pairs).
 #' See Details, section "Handling missing values".
 #' @param keep.pairScore [logical] should the result of each pairwise comparison be kept?
-#' @param seed [integer, >0] the seed to consider for the permutation test.
+#' @param seed [integer, >0] the seed to consider when performing resampling.
 #' If \code{NULL} no seed is set.
 #' @param cpus [integer, >0] the number of CPU to use.
 #' Only the permutation test can use parallel computation.
@@ -53,6 +53,7 @@
 #' Must have only two levels (e.g. \code{0} and \code{1}).
 #'   \item \code{endpoint}: [character vector] the name of the endpoint variable(s).
 #'   \item \code{threshold}: [numeric vector] critical values used to compare the pairs (threshold of minimal important difference).
+#' A pair will be classified as neutral if the difference in endpoint is strictly below this threshold.
 #' There must be one threshold for each endpoint variable; it must be \code{NA} for binary endpoints and positive for continuous or time to event endpoints. 
 #'   \item \code{status}: [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
 #' Must value \code{NA} when the endpoint is not a time to event.
@@ -108,8 +109,9 @@
 #' The U-statistic theory indicates that this approximation is asymptotically exact.
 #' The variance is computed using a H-projection of order 1 (default option), which is a consistent but downward biased estimator.
 #' An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
-#' \bold{WARNING}: the current implementation of the H-projection has not been validated when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
+#' \bold{WARNING}: the current implementation of the H-projection is not valid when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
 #'   \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
+#'   \item argument \code{method.inference="studentized permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimate.
 #'   \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
 #'   \item argument \code{method.inference=" studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
 #' }
@@ -136,7 +138,7 @@
 #'  \item \code{order.Hprojection} [1 or 2] the order of the H-projection used to compute the variance when \code{method.inference="u-statistic"}. 
 #' }
 #' 
-#' @return An \R object of class \code{\linkS4class{BuyseRes}}.
+#' @return An \R object of class \code{\linkS4class{S4BuyseTest}}.
 #' 
 #' @references 
 #' On the GPC procedure: Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoints in the two-sample problem}. \emph{Statistics in Medicine} 29:3245-3257 \cr
@@ -146,10 +148,10 @@
 #' On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). \bold{Large sample inference for a win ratio analysis of a composite outcome based on prioritized components}. \emph{Biostatistics} 17(1):178-187 \cr
 #'
 #' @seealso 
-#' \code{\link{BuyseRes-summary}} for a summary of the results of generalized pairwise comparison. \cr
-#' \code{\link{BuyseRes-class}} for a presentation of the \code{BuyseRes} object. \cr
+#' \code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
+#' \code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
 #' \code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
-#' @keywords function BuyseTes
+#' @keywords function BuyseTest
 #' @author Brice Ozenne
 
 ## * BuyseTest (example)
@@ -218,8 +220,8 @@
 #' summary(BT)
 #' 
 #' #### real example : Veteran dataset of the survival package ####
-#' #### Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
-#' #### scoring.rule = "Gehan"
+#' ## Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
+#' ## scoring.rule = "Gehan"
 #' 
 #' if(require(survival)){
 #' \dontrun{
@@ -227,24 +229,21 @@
 #'  
 #'   ## scoring.rule = "Gehan"
 #'   BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
-#'                         data=veteran, scoring.rule="Gehan",
-#'                         method.inference = "permutation", n.resampling = 1e3)
+#'                         data=veteran, scoring.rule="Gehan")
 #'   
 #'   summary_Gehan <- summary(BT_Gehan)
 #'   summary_Gehan <- summary(BT_Gehan, statistic = "winRatio")
 #'   
 #'   ## scoring.rule = "Peron"
 #'   BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
-#'                         data=veteran, scoring.rule="Peron",
-#'                         method.inference = "permutation", n.resampling = 1e3)
+#'                         data=veteran, scoring.rule="Peron")
 #' 
 #'   class(BT_Peron)
 #'   summary(BT_Peron)
 #' }
 #' }
 
-## * BuyseTest (code)
-##' @rdname BuyseTest
+## * Test (code)
 ##' @export
 BuyseTest <- function(formula,
                       data,
@@ -258,7 +257,7 @@ BuyseTest <- function(formula,
                       weight = NULL,
                       neutral.as.uninf = NULL,
                       keep.pairScore = NULL,
-                      seed = 10,
+                      seed = NULL,
                       cpus = NULL,
                       trace = NULL,
                       treatment = NULL,
@@ -328,7 +327,7 @@ BuyseTest <- function(formula,
                   "index.C","index.T","index.strata",
                   "level.treatment","level.strata", "method.score",
                   "n.strata","n.obs","n.obsStrata","n.obsStrataResampling","cumn.obsStrataResampling","skeletonPeron",
-                  "scoring.rule", "iidNuisance", "nUTTE.analyzedPeron_M1", "endpoint.UTTE", "status.UTTE", "D.UTTE","index.UTTE")
+                  "scoring.rule", "iidNuisance", "nUTTE.analyzedPeron_M1", "endpoint.UTTE", "status.UTTE", "D.UTTE","index.UTTE","keep.pairScore")
     outArgs[out.name] <- initializeData(data = outArgs$data,
                                         type = outArgs$type,
                                         endpoint = outArgs$endpoint,
@@ -344,6 +343,7 @@ BuyseTest <- function(formula,
                                         treatment = outArgs$treatment,
                                         hierarchical = outArgs$hierarchical,
                                         copy = TRUE,
+                                        keep.pairScore = outArgs$keep.pairScore,
                                         endpoint.TTE = outArgs$endpoint.TTE,
                                         status.TTE = outArgs$status.TTE,
                                         iidNuisance = outArgs$iidNuisance)
@@ -367,7 +367,7 @@ BuyseTest <- function(formula,
     envirBT$.BuyseTest <- .BuyseTest
     envirBT$initializeData <- initializeData
     envirBT$calcPeron <- calcPeron
-    
+
     ## ** Point estimation
     if (outArgs$trace > 1) {
         if(outArgs$iid){
@@ -400,12 +400,12 @@ BuyseTest <- function(formula,
     ## convert from a list of vector (output of C++) to a list of data.table
     if(outArgs$keep.pairScore){
         ## needed for inference with bebu
-        outPoint$tablePairScore <- pairScore2dt(outPoint$tableScore,
-                                                level.treatment = outArgs$level.treatment,
-                                                level.strata = outArgs$level.strata,
-                                                n.strata = outArgs$n.strata,
-                                                endpoint = outArgs$endpoint,
-                                                threshold = outArgs$threshold)
+        outPoint$tableScore <- pairScore2dt(outPoint$tableScore,
+                                            level.treatment = outArgs$level.treatment,
+                                            level.strata = outArgs$level.strata,
+                                            n.strata = outArgs$n.strata,
+                                            endpoint = outArgs$endpoint,
+                                            threshold = outArgs$threshold)
     }
     
     ## ** Inference
@@ -413,20 +413,10 @@ BuyseTest <- function(formula,
         do.call(printInference, args = outArgs)
     }
 
-    outResampling <- list(deltaResampling.netBenefit = array(dim=c(0,0,0)),
-                          deltaResampling.winRatio = array(dim=c(0,0,0)),
-                          DeltaResampling.netBenefit = matrix(NA, nrow = 0, ncol = 0),
-                          DeltaResampling.winRatio = matrix(NA, nrow = 0, ncol = 0),
-                          covariance = array(NA, dim = c(0,0,0)),
-                          n.resampling = as.double(NA))
-
-    if(outArgs$method.inference == "none"){
-        outPoint$Mvar <- matrix(nrow = 0, ncol = 0)
-        outPoint$iidAverage_favorable <- NULL
-        outPoint$iidAverage_unfavorable <- NULL
-    }else if(outArgs$method.inference == "u-statistic"){
+    outResampling <- NULL
+    if(outArgs$method.inference == "u-statistic"){
         ## done in the C++ code
-        ## outCovariance <- inferenceUstatistic(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
+        ## outCovariance <- inferenceUstatistic(tablePairScore = outPoint$tableScore, order = option$order.Hprojection,
         ##                                      count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
         ##                                      n.pairs = sum(outPoint$n_pairs), n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),
         ##                                      level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
@@ -436,80 +426,41 @@ BuyseTest <- function(formula,
         }
 
         ## direct computation of the variance
-        outCovariance <- inferenceUstatisticBebu(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
+        outCovariance <- inferenceUstatisticBebu(tablePairScore = outPoint$tableScore,
+                                                 order = option$order.Hprojection,
                                                  weight = outArgs$weight,
-                                                 count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
-                                                 n.pairs = outPoint$n_pairs, n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),                                                                                   level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
+                                                 count.favorable = colSums(outPoint$count_favorable),
+                                                 count.unfavorable = colSums(outPoint$count_unfavorable),
+                                                 n.pairs = outPoint$n_pairs,
+                                                 n.C = length(envirBT$outArgs$index.C),
+                                                 n.T = length(envirBT$outArgs$index.T),
+                                                 level.strata = outArgs$level.strata,
+                                                 n.strata = outArgs$n.strata,
+                                                 endpoint = outArgs$endpoint)
 
-        outPoint$Mvar <- outCovariance$Sigma
-        outPoint$iidAverage_favorable <- NULL
-        outPoint$iidAverage_unfavorable <- NULL
+        outPoint$covariance <- outCovariance$Sigma
         attr(outArgs$method.inference,"Hprojection") <- option$order.Hprojection
     }else if(grepl("bootstrap|permutation",outArgs$method.inference)){
         outResampling <- inferenceResampling(envirBT)
-        if(outArgs$iid==FALSE){
-            outPoint$Mvar <- matrix(nrow = 0, ncol = 0)
-            outPoint$iidAverage_favorable <- NULL
-            outPoint$iidAverage_unfavorable <- NULL
-        }
     }
     if((outArgs$method.inference != "none") && (outArgs$trace > 1)){
         cat("\n")
     }
 
-    ## ** Gather results into a BuyseRes object
+    ## ** Gather results into a S4BuyseTest object
     if(outArgs$trace > 1){
-        cat("Gather the results in a BuyseRes object \n")
+        cat("Gather the results in a S4BuyseTest object \n")
     }
-    scoring.rule <- c("Gehan","Peron")[outArgs$scoring.rule+1]
-    attr(scoring.rule,"method.score") <- outArgs$method.score
-    type <- c("Binary","Continuous","TimeToEvent")[outArgs$type]
-    attr(outArgs$level.treatment,"indexC") <- outArgs$index.C
-    attr(outArgs$level.treatment,"indexT") <- outArgs$index.T
-    attr(outArgs$level.strata,"index") <- outArgs$index.strata
-
-    BuyseRes.object <- BuyseRes(
-        count.favorable = outPoint$count_favorable,      
-        count.unfavorable = outPoint$count_unfavorable,
-        count.neutral = outPoint$count_neutral,    
-        count.uninf = outPoint$count_uninf,
-        n.pairs = outPoint$n_pairs,
-        delta.netBenefit = outPoint$delta_netBenefit,
-        delta.winRatio = outPoint$delta_winRatio,
-        Delta.netBenefit = outPoint$Delta_netBenefit,
-        Delta.winRatio = outPoint$Delta_winRatio,
-        type = type,
-        endpoint = outArgs$endpoint,
-        level.treatment = outArgs$level.treatment,
-        scoring.rule = scoring.rule,
-        hierarchical = outArgs$hierarchical,
-        neutral.as.uninf = outArgs$neutral.as.uninf,
-        correction.uninf = outArgs$correction.uninf,
-        method.inference = outArgs$method.inference,
-        strata = outArgs$strata,
-        level.strata = outArgs$level.strata,
-        threshold = outArgs$threshold,
-        n.resampling = outArgs$n.resampling,
-        deltaResampling.netBenefit = outResampling$deltaResampling.netBenefit,
-        deltaResampling.winRatio = outResampling$deltaResampling.winRatio,
-        DeltaResampling.netBenefit = outResampling$DeltaResampling.netBenefit,
-        DeltaResampling.winRatio = outResampling$DeltaResampling.winRatio,
-        covarianceResampling = outResampling$covariance,
-        covariance = outPoint$Mvar,
-        weight = outArgs$weight,
-        iidAverage_favorable = outPoint$iidAverage_favorable,
-        iidAverage_unfavorable = outPoint$iidAverage_unfavorable,
-        iidNuisance_favorable = outPoint$iidNuisance_favorable,
-        iidNuisance_unfavorable = outPoint$iidNuisance_unfavorable,
-        tablePairScore = if(outArgs$keep.pairScore){outPoint$tablePairScore}else{list()},
-        tableSurvival = if(outArgs$keep.survival){outPoint$tableSurvival}else{list()}
-    )
+    keep.args <- c("index.T", "index.C", "type","endpoint","level.strata","level.treatment","scoring.rule","hierarchical","neutral.as.uninf",
+                   "correction.uninf","method.inference","method.score","strata","threshold","weight","n.resampling")
+    BuyseTest.object <- do.call("S4BuyseTest", args = c(outPoint, outArgs[keep.args], outResampling))
+    
     if(outArgs$trace > 1){
         cat("\n")
     }
     
     ## ** export
-    return(BuyseRes.object)
+    return(BuyseTest.object)
 }
 
 ## * .BuyseTest (code)
@@ -544,46 +495,49 @@ BuyseTest <- function(formula,
                              threshold = envir$outArgs$threshold,
                              n.strata = envir$outArgs$n.strata,
                              strata = envir$outArgs$strata,
+                             precompute = envir$outArgs$precompute,
                              iidNuisance = envir$outArgs$iidNuisance * iid,
                              out = envir$outArgs$skeletonPeron)
     }
     
     ## ** Perform GPC
-    resBT <- GPC_cpp(endpoint = envir$outArgs$M.endpoint,
-                     status = envir$outArgs$M.status,
-                     indexC = outSample$ls.indexC,
-                     posC = outSample$ls.posC,
-                     indexT = outSample$ls.indexT,                     
-                     posT = outSample$ls.posT,                     
-                     threshold = envir$outArgs$threshold,
-                     weight = envir$outArgs$weight,
-                     method = envir$outArgs$method.score,
-                     D = envir$outArgs$D,
-                     D_UTTE = envir$outArgs$D.UTTE,
-                     n_strata = envir$outArgs$n.strata,
-                     nUTTE_analyzedPeron_M1 = envir$outArgs$nUTTE.analyzedPeron_M1,
-                     index_endpoint = envir$outArgs$index.endpoint,
-                     index_status = envir$outArgs$index.status,
-                     index_UTTE = envir$outArgs$index.UTTE,
-                     list_survTimeC = outSurv$survTimeC,
-                     list_survTimeT = outSurv$survTimeT,
-                     list_survJumpC = outSurv$survJumpC,
-                     list_survJumpT = outSurv$survJumpT,
-                     list_lastSurv = outSurv$lastSurv,
-                     p_C = outSurv$p.C,
-                     p_T = outSurv$p.T,
-                     iid_survJumpC = outSurv$iid$survJumpC,
-                     iid_survJumpT = outSurv$iid$survJumpT,
-                     zeroPlus = 1e-8,
-                     correctionUninf = envir$outArgs$correction.uninf,
-                     hierarchical = envir$outArgs$hierarchical,
-                     hprojection = envir$outArgs$order.Hprojection,
-                     neutralAsUninf = envir$outArgs$neutral.as.uninf,
-                     keepScore = (pointEstimation && envir$outArgs$keep.pairScore),
-                     returnIID = iid + iid*envir$outArgs$iidNuisance,
-                     debug = envir$outArgs$debug
-                     )
-    
+    resBT <- do.call(envir$outArgs$engine,
+                     args = list(endpoint = envir$outArgs$M.endpoint,
+                                 status = envir$outArgs$M.status,
+                                 indexC = outSample$ls.indexC,
+                                 posC = outSample$ls.posC,
+                                 indexT = outSample$ls.indexT,                     
+                                 posT = outSample$ls.posT,                     
+                                 threshold = envir$outArgs$threshold,
+                                 weight = envir$outArgs$weight,
+                                 method = envir$outArgs$method.score,
+                                 D = envir$outArgs$D,
+                                 D_UTTE = envir$outArgs$D.UTTE,
+                                 n_strata = envir$outArgs$n.strata,
+                                 nUTTE_analyzedPeron_M1 = envir$outArgs$nUTTE.analyzedPeron_M1,
+                                 index_endpoint = envir$outArgs$index.endpoint,
+                                 index_status = envir$outArgs$index.status,
+                                 index_UTTE = envir$outArgs$index.UTTE,
+                                 list_survTimeC = outSurv$survTimeC,
+                                 list_survTimeT = outSurv$survTimeT,
+                                 list_survJumpC = outSurv$survJumpC,
+                                 list_survJumpT = outSurv$survJumpT,
+                                 list_lastSurv = outSurv$lastSurv,
+                                 p_C = outSurv$p.C,
+                                 p_T = outSurv$p.T,
+                                 iid_survJumpC = outSurv$iid$survJumpC,
+                                 iid_survJumpT = outSurv$iid$survJumpT,
+                                 zeroPlus = 1e-8,
+                                 correctionUninf = envir$outArgs$correction.uninf,
+                                 hierarchical = envir$outArgs$hierarchical,
+                                 hprojection = envir$outArgs$order.Hprojection,
+                                 neutralAsUninf = envir$outArgs$neutral.as.uninf,
+                                 keepScore = (pointEstimation && envir$outArgs$keep.pairScore),
+                                 precompute = envir$outArgs$precompute,
+                                 returnIID = iid + iid*envir$outArgs$iidNuisance,
+                                 debug = envir$outArgs$debug
+                                 ))
+
     ## ** export
     if(pointEstimation){
         if(envir$outArgs$keep.survival){ ## useful to test initSurvival 
@@ -591,11 +545,9 @@ BuyseTest <- function(formula,
         }
         return(resBT)
     }else{
-        return(list(delta_netBenefit = resBT$delta_netBenefit,
-                    Delta_netBenefit = resBT$Delta_netBenefit,
-                    delta_winRatio = resBT$delta_winRatio,
-                    Delta_winRatio = resBT$Delta_winRatio,
-                    Mvar = resBT$Mvar))
+        return(list(delta = resBT$delta,
+                    Delta = resBT$Delta,
+                    covariance = resBT$covariance))
     }
 }
 
@@ -610,10 +562,11 @@ calcSample <- function(envir, method.inference){
         ## identifier for each observation from the control/treatment group (unique even when boostrap)
         ls.posC = vector(mode = "list", length = envir$outArgs$n.strata),
         ls.posT = vector(mode = "list", length = envir$outArgs$n.strata),
-        data = data.table()
+        data = data.table::data.table()
     )
 
     if(method.inference == "none"){
+
         ## ** no resampling
         if(envir$outArgs$n.strata==1){        
             out$ls.indexC[[1]] <- envir$outArgs$index.C - 1
@@ -632,91 +585,76 @@ calcSample <- function(envir, method.inference){
         }
     }else{
 
-        if(grepl("permutation",method.inference)){
-            test.perm <- TRUE
-            replace <- FALSE
-        }else if(grepl("bootstrap",method.inference)){
-            test.perm <- FALSE
-            replace <- TRUE
-        }
-
-        ## ** perform resampling
+        ## ** stratified resampling
         n.strataResampling <- length(envir$outArgs$n.obsStrataResampling)
         index.resampling <- NULL
-        for(iSR in 1:n.strataResampling){ ## iSR <- 1 
-            index.resampling <- c(index.resampling, envir$outArgs$cumn.obsStrataResampling[iSR] + sample.int(envir$outArgs$n.obsStrataResampling[iSR], replace = replace))
-        }            
+        for (iSR in 1:n.strataResampling) {
+            index.resampling <- c(index.resampling,
+                                  envir$outArgs$cumn.obsStrataResampling[iSR] + sample.int(envir$outArgs$n.obsStrataResampling[iSR], replace = grepl("bootstrap",method.inference)))
+        }
 
         ## ** reconstruct groups
-        if(envir$outArgs$n.strata==1){
-            ## index of the new observations in the old dataset by treatment group
-            if(test.perm){
+        ## index: index of the new observations in the old dataset by treatment group
+        ## pos: unique identifier for each observation
+        if(envir$outArgs$n.strata==1){ ## no strata
+            
+            if(grepl("permutation",method.inference)){
                 out$ls.indexC[[1]] <- which(index.resampling %in% envir$outArgs$index.C) - 1
                 out$ls.indexT[[1]] <- which(index.resampling %in% envir$outArgs$index.T) - 1
-            }else{
-                out$ls.indexC[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.C] - 1
-                out$ls.indexT[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.T] - 1
+                out$ls.posC[[1]] <- out$ls.indexC[[1]]
+                out$ls.posT[[1]] <- out$ls.indexT[[1]]
+            }else if(grepl("bootstrap",method.inference)){
+                out$ls.posC[[1]] <- which(index.resampling %in% envir$outArgs$index.C) - 1
+                out$ls.posT[[1]] <- which(index.resampling %in% envir$outArgs$index.T) - 1
+                out$ls.indexC[[1]] <- index.resampling[out$ls.posC[[1]] + 1] - 1
+                out$ls.indexT[[1]] <- index.resampling[out$ls.posT[[1]] + 1] - 1
             }
-
             ## check that each group has at least one observation
-            if(length(out$ls.indexC[[1]])==0 || length(out$ls.indexT[[1]])==0){return(NULL)} 
+            if(length(out$ls.indexC[[1]])==0 || length(out$ls.indexT[[1]])==0){return(NULL)}
+            ## out$data[treatment == 0,eventtime1] - envir$outArgs$M.endpoint[out$ls.indexC[[1]]+1,1]
+            ## out$data[treatment == 1,eventtime1] - envir$outArgs$M.endpoint[out$ls.indexT[[1]]+1,1]
+            
+        }else{ ## strata
 
-            ## unique identifier for each observation
-            iNc <- length(out$ls.indexC[[1]])
-            iNt <- length(out$ls.indexT[[1]])
-            out$ls.posC[[1]] <- 0:(iNc-1)
-            out$ls.posT[[1]] <- iNc + 0:(iNt-1)
-
-        }else{
-            ## index of the new observation in the old dataset by treatment group
-            if(test.perm){
+            if (grepl("permutation",method.inference)) {
                 index.C <- which(index.resampling %in% envir$outArgs$index.C)
                 index.T <- which(index.resampling %in% envir$outArgs$index.T)
-            }else{
-                index.C <- index.resampling[index.resampling %in% envir$outArgs$index.C]
-                index.T <- index.resampling[index.resampling %in% envir$outArgs$index.T]
             }
-
-            cumn <- 0
+            
             for(iStrata in 1:envir$outArgs$n.strata){ ## iStrata <- 1  
-
                 ## index of the new observation in the old dataset by treatment group
-                if(test.perm){
+                if(grepl("permutation",method.inference)){
                     out$ls.indexC[[iStrata]] <- intersect(index.C, envir$outArgs$index.strata[[iStrata]]) - 1
                     out$ls.indexT[[iStrata]] <- intersect(index.T, envir$outArgs$index.strata[[iStrata]]) - 1
-                }else{
-                    ## WARNING: do not use intersect since it removes duplicated elements
-                    iIndex.strata <- index.resampling[index.resampling %in% envir$outArgs$index.strata[[iStrata]]]                
-                    out$ls.indexC[[iStrata]] <- index.C[index.C %in% iIndex.strata] - 1
-                    out$ls.indexT[[iStrata]] <- index.T[index.T %in% iIndex.strata] - 1
+                    out$ls.posC[[iStrata]] <- out$ls.indexC[[iStrata]]
+                    out$ls.posT[[iStrata]] <- out$ls.indexT[[iStrata]]
+                }else if(grepl("bootstrap",method.inference)){
+                    out$ls.posC[[iStrata]] <- which(index.resampling %in% intersect(envir$outArgs$index.C, envir$outArgs$index.strata[[iStrata]])) - 1
+                    out$ls.posT[[iStrata]] <- which(index.resampling %in% intersect(envir$outArgs$index.T, envir$outArgs$index.strata[[iStrata]])) - 1
+                    out$ls.indexC[[iStrata]] <- index.resampling[out$ls.posC[[iStrata]] + 1] - 1
+                    out$ls.indexT[[iStrata]] <- index.resampling[out$ls.posT[[iStrata]] + 1] - 1
                 }
-
                 ## check that each group has at least one observation
                 if(length(out$ls.indexC[[iStrata]])==0 || length(out$ls.indexT[[iStrata]])==0){return(NULL)} 
-
-                ## unique identifier for each observation
-                iNc <- length(out$ls.indexC[[iStrata]])
-                iNt <- length(out$ls.indexT[[iStrata]])
-                out$ls.posC[[iStrata]] <- cumn + 0:(iNc-1)
-                out$ls.posT[[iStrata]] <- cumn + iNc + 0:(iNt-1)
-                cumn <- cumn + iNc + iNt
             }
+            
         }
 
         ## ** rebuild dataset
         if(envir$outArgs$scoring.rule>0){
-            if(method.inference == "permutation"){
+            if(grepl("permutation",method.inference)){
                 out$data <- data.table::data.table(envir$outArgs$data[[envir$outArgs$treatment]][index.resampling],
                                                    "..strata.." = envir$outArgs$data[["..strata.."]],
                                                    envir$outArgs$M.endpoint,envir$outArgs$M.status)
                 data.table::setnames(out$data, old = names(out$data)[1], new = envir$outArgs$treatment)
             }else{
-                out$data <- data.table::data.table(envir$outArgs$data,
-                                                   envir$outArgs$M.endpoint,envir$outArgs$M.status)[index.resampling]
+                out$data <- data.table::data.table(envir$outArgs$data[,.SD,.SDcols = c(envir$outArgs$treatment,"..strata..")],
+                                                   envir$outArgs$M.endpoint,
+                                                   envir$outArgs$M.status)[index.resampling]
             }
         }
-    }
 
+    }
     return(out)
 }
 
@@ -744,6 +682,7 @@ calcPeron <- function(data,
                       strata,
                       threshold,
                       n.strata,
+                      precompute,
                       iidNuisance,
                       out){
 
@@ -814,7 +753,6 @@ calcPeron <- function(data,
         
         indexX.C <- which(model.tte[[iEndpoint.UTTE]]$XX[[treatment]]==0)
         indexX.T <- which(model.tte[[iEndpoint.UTTE]]$XX[[treatment]]==1)
-
         
         for(iStrata in 1:n.strata){ ## iStrata <- 1
             iNcontrol <- length(ls.indexC[[iStrata]])
@@ -887,7 +825,7 @@ calcPeron <- function(data,
             
             for(iEndpoint in iIndex.associatedEndpoint){ ## iEndpoint <- 1
               iThreshold <- threshold[iEndpoint] ## iThreshold = 1
-              
+
               ## **** last survival
               out$lastSurv[[iEndpoint]][iStrata,] <- cbind(iLast.cif1C, iLast.cif1T, iLast.cif2C, iLast.cif2T)
               
@@ -909,14 +847,14 @@ calcPeron <- function(data,
                                                             #"CIF2T_0" = iCif2T.timeC)
               
               out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
-                                                             "CIF1C-threshold" = iPredCif1C(iTimeT - iThreshold),
-                                                             "CIF1C_0" = iCif1C.timeT,
-                                                             "CIF1C+threshold" = iPredCif1C(iTimeT + iThreshold),
-                                                             "CIF1T-threshold" = iPredCif1T(iTimeT - iThreshold),
-                                                             "CIF1T_0" = iCif1T.timeT,
-                                                             "CIF1T+threshold" = iPredCif1T(iTimeT + iThreshold),
+                                                              "CIF1C-threshold" = iPredCif1C(iTimeT - iThreshold),
+                                                              "CIF1C_0" = iCif1C.timeT,
+                                                              "CIF1C+threshold" = iPredCif1C(iTimeT + iThreshold),
+                                                              "CIF1T-threshold" = iPredCif1T(iTimeT - iThreshold),
+                                                              "CIF1T_0" = iCif1T.timeT,
+                                                              "CIF1T+threshold" = iPredCif1T(iTimeT + iThreshold),
                                         #"CIF2C_0" = iCif2C.timeT,
-                                                             "CIF2T_0" = iCif2T.timeT)
+                                                              "CIF2T_0" = iCif2T.timeT)
             }
 
             }else{
@@ -976,81 +914,69 @@ calcPeron <- function(data,
                     ## **** last survival
                     out$lastSurv[[iEndpoint]][iStrata,1:2] <- c(iLast.survC, iLast.survT)
 
-                ## **** survival at jump times
-                if(length(iJumpC)>0){                    
-                    iIndexSurvivalT.JumpCpTau <- prodlim::sindex(iSurvTimeT, iJumpC + iThreshold)
-                    out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(time = iJumpC,
-                                                                   survival = iSurvT[iIndexSurvivalT.JumpCpTau],
-                                                                   dSurvival = iDSurvC)
-
-                    if(iidNuisance){
-                        out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(out$survJumpC[[iEndpoint]][[iStrata]],
+                    ## **** survival at jump times
+                    if(length(iJumpC)>0){                    
+                        iIndexSurvivalT.JumpCpTau <- prodlim::sindex(iSurvTimeT, iJumpC + iThreshold)
+                        out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(time = iJumpC,
+                                                                       survival = iSurvT[iIndexSurvivalT.JumpCpTau],
+                                                                       dSurvival = iDSurvC,
                                                                        index.survival = iIndexSurvivalT.JumpCpTau - 1,
                                                                        index.dSurvival1 = iIndexSurvivalC.JumpCm - 1,
                                                                        index.dSurvival2 = iIndexSurvivalC.JumpCp - 1)
                         ## iSurvT[iIndexSurvivalT.JumpCpTau]
                         ## iSurvC[iIndexSurvivalC.JumpCm]
+                    }else{
+                        out$survJumpC[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 6,
+                                                                        dimnames = list(NULL, c("time","survival","dSurvival","index.survival","index.dSurvival1","index.dSurvival2")))
                     }
-                }else{
-                    out$survJumpC[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 3,
-                                                                    dimnames = list(NULL, c("time","surival","dSurvival")))
-                }
                 
-                if(length(iJumpT)>0){                    
-                    iIndexSurvivalC.JumpTpTau <- prodlim::sindex(iSurvTimeC, iJumpT + iThreshold)                
-                    out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(time = iJumpT,
-                                                                   survival = iSurvC[iIndexSurvivalC.JumpTpTau],
-                                                                   dSurvival = iDSurvT)
-                    if(iidNuisance){
-                        out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(out$survJumpT[[iEndpoint]][[iStrata]],
+                    if(length(iJumpT)>0){                    
+                        iIndexSurvivalC.JumpTpTau <- prodlim::sindex(iSurvTimeC, iJumpT + iThreshold)                
+                        out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(time = iJumpT,
+                                                                       survival = iSurvC[iIndexSurvivalC.JumpTpTau],
+                                                                       dSurvival = iDSurvT,
                                                                        index.survival = iIndexSurvivalC.JumpTpTau - 1,
                                                                        index.dSurvival1 = iIndexSurvivalT.JumpTm - 1,
                                                                        index.dSurvival2 = iIndexSurvivalT.JumpTp - 1)
+                
+                    }else{
+                        out$survJumpT[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 6,
+                                                                        dimnames = list(NULL, c("time","survival","dSurvival","index.survival","index.dSurvival1","index.dSurvival2")))
                     }
-                }else{
-                    out$survJumpT[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 3,
-                                                                    dimnames = list(NULL, c("time","surival","dSurvival")))
-                }
 
-                ## **** survival at observation time (+/- threshold)
-                iIndexSurvivalC.timeCmTau <- prodlim::sindex(iSurvTimeC, iTimeC - iThreshold)
-                iIndexSurvivalC.timeCpTau <- prodlim::sindex(iSurvTimeC, iTimeC + iThreshold)
-                iIndexSurvivalT.timeCmTau <- prodlim::sindex(iSurvTimeT, iTimeC - iThreshold)
-                iIndexSurvivalT.timeCpTau <- prodlim::sindex(iSurvTimeT, iTimeC + iThreshold)
+                    ## **** survival at observation time (+/- threshold)
+                    iIndexSurvivalC.timeCmTau <- prodlim::sindex(iSurvTimeC, iTimeC - iThreshold)
+                    iIndexSurvivalC.timeCpTau <- prodlim::sindex(iSurvTimeC, iTimeC + iThreshold)
+                    iIndexSurvivalT.timeCmTau <- prodlim::sindex(iSurvTimeT, iTimeC - iThreshold)
+                    iIndexSurvivalT.timeCpTau <- prodlim::sindex(iSurvTimeT, iTimeC + iThreshold)
 
-                out$survTimeC[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeC,
-                                                               "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeCmTau],
-                                                               "SurvivalC_0" = iSurvivalC.timeC,
-                                                               "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeCpTau],
-                                                               "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeCmTau],
-                                                               "SurvivalT_0" = iSurvivalT.timeC,
-                                                               "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeCpTau])
-                if(iidNuisance){                    
-                    out$survTimeC[[iEndpoint]][[iStrata]] <- cbind(out$survTimeC[[iEndpoint]][[iStrata]],
-                                                                   "index.SurvivalC-threshold" = iIndexSurvivalC.timeCmTau - 1,
-                                                                   "index.SurvivalC_0" = iIndexSurvivalC.timeC - 1,
-                                                                   "index.SurvivalC+threshold" = iIndexSurvivalC.timeCpTau - 1,
-                                                                   "index.SurvivalT-threshold" = iIndexSurvivalT.timeCmTau - 1,
-                                                                   "index.SurvivalT_0" = iIndexSurvivalT.timeC - 1,
-                                                                   "index.SurvivalT+threshold" = iIndexSurvivalT.timeCpTau - 1
-                                                                   )
-                }
+                    out$survTimeC[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeC,
+                                                                    "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeCmTau],
+                                                                    "SurvivalC_0" = iSurvivalC.timeC,
+                                                                    "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeCpTau],
+                                                                    "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeCmTau],
+                                                                    "SurvivalT_0" = iSurvivalT.timeC,
+                                                                    "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeCpTau],
+                                                                    "index.SurvivalC-threshold" = iIndexSurvivalC.timeCmTau - 1,
+                                                                    "index.SurvivalC_0" = iIndexSurvivalC.timeC - 1,
+                                                                    "index.SurvivalC+threshold" = iIndexSurvivalC.timeCpTau - 1,
+                                                                    "index.SurvivalT-threshold" = iIndexSurvivalT.timeCmTau - 1,
+                                                                    "index.SurvivalT_0" = iIndexSurvivalT.timeC - 1,
+                                                                    "index.SurvivalT+threshold" = iIndexSurvivalT.timeCpTau - 1
+                                                                    )
 
-                iIndexSurvivalC.timeTmTau <- prodlim::sindex(iSurvTimeC, iTimeT - iThreshold)
-                iIndexSurvivalC.timeTpTau <- prodlim::sindex(iSurvTimeC, iTimeT + iThreshold)
-                iIndexSurvivalT.timeTmTau <- prodlim::sindex(iSurvTimeT, iTimeT - iThreshold)
-                iIndexSurvivalT.timeTpTau <- prodlim::sindex(iSurvTimeT, iTimeT + iThreshold)
+                    iIndexSurvivalC.timeTmTau <- prodlim::sindex(iSurvTimeC, iTimeT - iThreshold)
+                    iIndexSurvivalC.timeTpTau <- prodlim::sindex(iSurvTimeC, iTimeT + iThreshold)
+                    iIndexSurvivalT.timeTmTau <- prodlim::sindex(iSurvTimeT, iTimeT - iThreshold)
+                    iIndexSurvivalT.timeTpTau <- prodlim::sindex(iSurvTimeT, iTimeT + iThreshold)
 
-                out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
-                                                               "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeTmTau],
-                                                               "SurvivalC_0" = iSurvivalC.timeT,
-                                                               "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeTpTau],
-                                                               "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeTmTau],
-                                                               "SurvivalT_0" = iSurvivalT.timeT,
-                                                               "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeTpTau]
-                                                               )
-                if(iidNuisance){
-                    out$survTimeT[[iEndpoint]][[iStrata]] <- cbind(out$survTimeT[[iEndpoint]][[iStrata]],
+                    out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
+                                                                   "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeTmTau],
+                                                                   "SurvivalC_0" = iSurvivalC.timeT,
+                                                                   "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeTpTau],
+                                                                   "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeTmTau],
+                                                                   "SurvivalT_0" = iSurvivalT.timeT,
+                                                                   "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeTpTau],
                                                                    "index.SurvivalC-threshold" = iIndexSurvivalC.timeTmTau - 1,
                                                                    "index.SurvivalC_0" = iIndexSurvivalC.timeT - 1,
                                                                    "index.SurvivalC+threshold" = iIndexSurvivalC.timeTpTau - 1,
@@ -1058,24 +984,23 @@ calcPeron <- function(data,
                                                                    "index.SurvivalT_0" = iIndexSurvivalT.timeT - 1,
                                                                    "index.SurvivalT+threshold" = iIndexSurvivalT.timeTpTau - 1
                                                                    )
-                }
-            }
-
-            }
-        }
-    }
+                } ## endpoint-threshold
+            } ## CR
+        } ## strata
+    } ## endpoint UTTE
 
     ## ** prepare influence function
-    out$iid <- vector(mode = "list", length = 4)
-    template <- lapply(1:D.UTTE, function(IE){
+    out$iid <- list(survJumpC = lapply(1:D.UTTE, function(IE){
         lapply(1:n.strata, matrix, nrow = 0, ncol = 0)
-        })
-    out$iid <- lapply(out$iid, function(x){template})
-    names(out$iid) <- c("survJumpC","dSurvJumpC","survJumpT","dSurvJumpT")
+    }),
+    survJumpT = lapply(1:D.UTTE, function(IE){
+        lapply(1:n.strata, matrix, nrow = 0, ncol = 0)
+    })
+    )
 
     if(iidNuisance){
         iid.model.tte <- lapply(model.tte, function(iModel){ ## iModel <- model.tte[[1]]
-            iOut <- iidProdlim(iModel, add0 = TRUE)
+            iOut <- lava::iid(iModel, add0 = TRUE)
             iOut$IFsurvival.control <- iOut$IFsurvival[which(iOut$X[,treatment]==0)]
             iOut$IFsurvival.treatment <- iOut$IFsurvival[which(iOut$X[,treatment]==1)]
             return(iOut)
@@ -1085,30 +1010,116 @@ calcPeron <- function(data,
             iIndex.associatedEndpoint <- which(endpoint == iEndpoint.UTTE.name)
 
             for(iStrata in 1:n.strata){  ## iStrata <- 1
-                iIID.control <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.control[[iStrata]]
-                iIID.treatment <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.treatment[[iStrata]]
-
                 ## iid.model.tte[[iEndpoint]]$time
-                out$iid$survJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control
-                if(NCOL(iIID.control)>1){
-                    out$iid$dSurvJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control - cbind(0,iIID.control[,1:(NCOL(iIID.control)-1),drop=FALSE])
-                }else{
-                    out$iid$dSurvJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control
-                }
+                out$iid$survJumpC[[iEndpoint.UTTE]][[iStrata]] <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.control[[iStrata]]
+                out$iid$survJumpT[[iEndpoint.UTTE]][[iStrata]] <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.treatment[[iStrata]]
                 
-                out$iid$survJumpT[[iEndpoint.UTTE]][[iStrata]] <- iIID.treatment
-                if(NCOL(iIID.treatment)>1){
-                    out$iid$dSurvJumpT[[iEndpoint.UTTE]][[iStrata]] <-  iIID.treatment - cbind(0,iIID.treatment[,1:(NCOL(iIID.treatment)-1),drop=FALSE])
-                }else{
-                    out$iid$dSurvJumpT[[iEndpoint.UTTE]][[iStrata]] <-  iIID.treatment
-                }
-                out$p.C[iStrata, iIndex.associatedEndpoint] <- NCOL(iIID.control)
-                out$p.T[iStrata, iIndex.associatedEndpoint] <- NCOL(iIID.treatment)
+                out$p.C[iStrata, iIndex.associatedEndpoint] <- NCOL(out$iid$survJumpC[[iEndpoint.UTTE]][[iStrata]])
+                out$p.T[iStrata, iIndex.associatedEndpoint] <- NCOL(out$iid$survJumpT[[iEndpoint.UTTE]][[iStrata]])
             }
         }
-        
     }
-    
+
+    ## ** pre-compute integrals
+    for(iEndpoint in 1:length(endpoint)){ ## iEndpoint <- 1
+        
+        if(!precompute || method.score[iEndpoint]!=4){next} ## only for survival - not (yet!) available for the competing risk case
+        
+        for(iStrata in 1:n.strata){  ## iStrata <- 1
+            ls.intC <- calcIntegralSurv2_cpp(time = out$survJumpC[[iEndpoint]][[iStrata]][,"time"],
+                                             survival = out$survJumpC[[iEndpoint]][[iStrata]][,"survival"],
+                                             dSurvival = out$survJumpC[[iEndpoint]][[iStrata]][,"dSurvival"],
+                                             index_survival = out$survJumpC[[iEndpoint]][[iStrata]][,"index.survival"],
+                                             index_dSurvival1 = out$survJumpC[[iEndpoint]][[iStrata]][,"index.dSurvival1"],
+                                             index_dSurvival2 = out$survJumpC[[iEndpoint]][[iStrata]][,"index.dSurvival2"],
+                                             lastSurv = out$lastSurv[[iEndpoint]][iStrata,2], ## treatment,
+                                             lastdSurv = out$lastSurv[[iEndpoint]][iStrata,1], ## control,
+                                             iidNuisance = iidNuisance,
+                                             p_Surv = out$p.T[iStrata,iEndpoint],
+                                             p_SurvD = out$p.C[iStrata,iEndpoint],
+                                             nJump = NROW(out$survJumpC[[iEndpoint]][[iStrata]]))
+
+            ls.intT <- calcIntegralSurv2_cpp(time = out$survJumpT[[iEndpoint]][[iStrata]][,"time"],
+                                             survival = out$survJumpT[[iEndpoint]][[iStrata]][,"survival"],
+                                             dSurvival = out$survJumpT[[iEndpoint]][[iStrata]][,"dSurvival"],
+                                             index_survival = out$survJumpT[[iEndpoint]][[iStrata]][,"index.survival"],
+                                             index_dSurvival1 = out$survJumpT[[iEndpoint]][[iStrata]][,"index.dSurvival1"],
+                                             index_dSurvival2 = out$survJumpT[[iEndpoint]][[iStrata]][,"index.dSurvival2"],
+                                             lastSurv = out$lastSurv[[iEndpoint]][iStrata,1], ## control,
+                                             lastdSurv = out$lastSurv[[iEndpoint]][iStrata,2], ## treatment,
+                                             iidNuisance = iidNuisance,
+                                             p_Surv = out$p.C[iStrata,iEndpoint],
+                                             p_SurvD = out$p.T[iStrata,iEndpoint],
+                                             nJump = NROW(out$survJumpT[[iEndpoint]][[iStrata]]))
+        
+            ## not normal sidex because we want to catch before jump
+            ## e.g. jump.times = 1:3, eval.times = c(0,1,1.1,2,3,4) should give c(1,2,2,3,4,4)
+            ## e.g. 3 - prodlim::sindex(jump.times = 1:3, eval.times = c(0,1,1.1,2,3,4), strict = TRUE, comp = "greater") + 1            
+            iTimeC <- out$survTimeC[[iEndpoint]][[iStrata]][,"time"]
+            if(length(ls.intT$time)>0){
+                index.dSurvivalT.tau <- length(ls.intT$time)-prodlim::sindex(jump.times = ls.intT$time, eval.times = iTimeC - threshold[iEndpoint], strict = TRUE, comp = "greater")
+            }else{
+                index.dSurvivalT.tau <- NA
+            }
+            if(length(ls.intC$time)>0){
+                index.dSurvivalC.0 <- length(ls.intC$time)-prodlim::sindex(jump.times = ls.intC$time, eval.times = iTimeC, strict = TRUE, comp = "greater")
+            }else{
+                index.dSurvivalC.0 <- NA
+            }
+            iTimeT <- out$survTimeT[[iEndpoint]][[iStrata]][,"time"]
+            if(length(ls.intC$time)>0){
+                index.dSurvivalC.tau <- length(ls.intC$time)-prodlim::sindex(jump.times = ls.intC$time, eval.times = iTimeT - threshold[iEndpoint], strict = TRUE, comp = "greater")
+            }else{
+                index.dSurvivalC.tau <- NA
+            }
+            if(length(ls.intT$time)>0){
+                index.dSurvivalT.0 <- length(ls.intT$time)-prodlim::sindex(jump.times = ls.intT$time, eval.times = iTimeT, strict = TRUE, comp = "greater")
+            }else{
+                index.dSurvivalT.0 <- NA
+            }
+            
+            ## get survivals
+            out$survTimeC[[iEndpoint]][[iStrata]] <- cbind(out$survTimeC[[iEndpoint]][[iStrata]],
+                                                           "int.dSurvivalT-threshold_lower" = ls.intT$intSurv_lower[index.dSurvivalT.tau+1],
+                                                           "int.dSurvivalT-threshold_upper" = ls.intT$intSurv_upper[index.dSurvivalT.tau+1],
+                                                           "int.dSurvivalC_0_lower" = ls.intC$intSurv_lower[index.dSurvivalC.0+1],
+                                                           "int.dSurvivalC_0_upper" = ls.intC$intSurv_upper[index.dSurvivalC.0+1])
+
+            out$survTimeT[[iEndpoint]][[iStrata]] <- cbind(out$survTimeT[[iEndpoint]][[iStrata]],
+                                                           "int.dSurvivalC-threshold_lower" = ls.intC$intSurv_lower[index.dSurvivalC.tau+1],
+                                                           "int.dSurvivalC-threshold_upper" = ls.intC$intSurv_upper[index.dSurvivalC.tau+1],
+                                                           "int.dSurvivalT_0_lower" = ls.intT$intSurv_lower[index.dSurvivalT.0+1],
+                                                           "int.dSurvivalT_0_upper" = ls.intT$intSurv_upper[index.dSurvivalT.0+1])
+
+            if(iidNuisance){
+                colnames(ls.intC$intSurv_deriv) <- c("index.jump","time","index.param.surv","value.surv","index.param.dsurv1","value.dsurv1","index.param.dsurv2","value.dsurv2")
+                colnames(ls.intT$intSurv_deriv) <- c("index.jump","time","index.param.surv","value.surv","index.param.dsurv1","value.dsurv1","index.param.dsurv2","value.dsurv2")
+                out$survJumpC[[iEndpoint]][[iStrata]] <- ls.intC$intSurv_deriv
+                out$survJumpT[[iEndpoint]][[iStrata]] <- ls.intT$intSurv_deriv
+                
+                out$survTimeC[[iEndpoint]][[iStrata]] <- cbind(out$survTimeC[[iEndpoint]][[iStrata]],
+                                                               "index.int.dSurvivalT-threshold" = index.dSurvivalT.tau,
+                                                               "indexMax.int.dSurvivalT-threshold" = NROW(ls.intT$intSurv_deriv)-1,
+                                                               "index.int.dSurvivalC_0" = index.dSurvivalC.0,
+                                                               "indexMax.int.dSurvivalC_0" = NROW(ls.intC$intSurv_deriv)-1)
+                
+                out$survTimeT[[iEndpoint]][[iStrata]] <- cbind(out$survTimeT[[iEndpoint]][[iStrata]],
+                                                               "index.int.dSurvivalC-threshold" = index.dSurvivalC.tau,
+                                                               "indexMax.int.dSurvivalC-threshold" = NROW(ls.intC$intSurv_deriv)-1,
+                                                               "index.int.dSurvivalT_0" = index.dSurvivalT.0,
+                                                               "indexMax.int.dSurvivalT_0" = NROW(ls.intT$intSurv_deriv)-1)
+
+
+## cbind(value = ls.intC$intSurv_lower, ls.intC$intSurv_deriv)
+                ## cbind(value = ls.intT$intSurv_lower, ls.intT$intSurv_deriv)
+                
+            }else{
+                out$survJumpC[[iEndpoint]][[iStrata]] <- matrix(0, nrow = 0, ncol = 0)
+                out$survJumpT[[iEndpoint]][[iStrata]] <- matrix(0, nrow = 0, ncol = 0)
+            }
+        }
+    }
+
     ## ** export
     return(out)
     

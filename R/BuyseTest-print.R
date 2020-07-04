@@ -41,7 +41,7 @@ printGeneral <- function(status,
     name.col <- c("NA", "endpoint","type","operator","threshold","event")
     df.endpoint <- data.frame(matrix(NA, nrow = D, ncol = 6,
                                      dimnames = list(NULL, name.col)
-                                     ))
+                                     ), stringsAsFactors = FALSE)
     if(hierarchical){
         df.endpoint[,1] <- paste0("      ",1:D)
         names(df.endpoint)[1] <- "      priority"
@@ -95,7 +95,6 @@ printGeneral <- function(status,
     }
     if(D.TTE>0){
         cat("   - right-censored pairs: ")
-
         n.CR <- sum(grep("2", txt.eventType))
         if(n.CR==D.TTE){
             txt.Peron <- "cif"

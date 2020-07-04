@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  2 2019 (16:29) 
 ## Version: 
-## Last-Updated: jan  7 2020 (10:46) 
+## Last-Updated: maj  5 2020 (10:37) 
 ##           By: Brice Ozenne
-##     Update #: 158
+##     Update #: 168
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * Documentation - auc
 #' @title Estimation of the Area Under the ROC Curve
 #' @name auc
-#' @aliases auc
 #' 
 #' @description Estimation of the Area Under the ROC curve, possibly after cross validation,
 #' to assess the discriminant ability of a biomarker regarding a disease status.
@@ -66,7 +65,6 @@
 
 
 ## * Code - auc
-#' @rdname auc
 #' @export
 auc <- function(labels, predictions, fold = NULL, observation = NULL, direction = ">",
                 null = 0.5, conf.level = 0.95, transformation = FALSE){
@@ -103,7 +101,8 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
     }
     
     df <- data.frame(Y = labels,
-                     X = predictions)
+                     X = predictions,
+                     stringsAsFactors = FALSE)
     formula <- Y ~ cont(X)
 
     if(!is.null(fold)){
@@ -119,7 +118,6 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
     BuyseTest.options(order.Hprojection = 2)
     e.BT <- BuyseTest(formula, method.inference = "u-statistic", data = df, trace = 0)
     BuyseTest.options(order.Hprojection = order.save)
-
     indexC <- attr(e.BT@level.treatment,"indexC")
     n.C <- length(indexC)
     indexT <- attr(e.BT@level.treatment,"indexT")
@@ -147,7 +145,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
         if(!is.null(observation)){
             M.iid <- do.call(cbind,tapply(observation, df$fold, function(iVec){
                 iIID <- vector(mode = "numeric", length = n.obs)
-                iIID[iVec] <- scale(iid(e.BT, normalize = FALSE)[iVec,"favorable",drop=FALSE], center = TRUE, scale = FALSE)
+                iIID[iVec] <- scale(getIid(e.BT, normalize = FALSE)[iVec,"favorable",drop=FALSE], center = TRUE, scale = FALSE)
                 iIID[intersect(iVec,indexC)] <- iIID[intersect(iVec,indexC)]/n.C
                 iIID[intersect(iVec,indexT)] <- iIID[intersect(iVec,indexT)]/n.T
                 return(iIID)
@@ -163,7 +161,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
         if(!is.null(observation)){
             M.iid <- do.call(cbind,tapply(observation, df$fold, function(iVec){
                 iIID <- vector(mode = "numeric", length = n.obs)
-                iIID[iVec] <- scale(iid(e.BT, normalize = FALSE)[iVec,"unfavorable",drop=FALSE], center = TRUE, scale = FALSE)
+                iIID[iVec] <- scale(getIid(e.BT, normalize = FALSE)[iVec,"unfavorable",drop=FALSE], center = TRUE, scale = FALSE)
                 iIID[intersect(iVec,indexC)] <- iIID[intersect(iVec,indexC)]/n.C
                 iIID[intersect(iVec,indexT)] <- iIID[intersect(iVec,indexT)]/n.T
                 return(iIID)
@@ -187,7 +185,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
             out$estimate[iFold] <- iCount/e.BT@n.pairs[iFold]
 
             if(!is.null(observation)){
-                M.iid[iVec,iFold] <- scale(iid(e.BT, normalize = FALSE)[iVec,iDirection,drop=FALSE], center = TRUE, scale = FALSE)
+                M.iid[iVec,iFold] <- scale(getIid(e.BT, normalize = FALSE)[iVec,iDirection,drop=FALSE], center = TRUE, scale = FALSE)
                 M.iid[intersect(iVec,indexC),iFold] <- M.iid[intersect(iVec,indexC),iFold]/n.C
                 M.iid[intersect(iVec,indexT),iFold] <- M.iid[intersect(iVec,indexT),iFold]/n.T
             }
@@ -234,9 +232,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
     class(out) <- append("BuyseTestAuc",class(out))
     attr(out, "contrast") <- e.BT@level.treatment
     attr(out, "n.fold") <- n.fold
-    if(!is.null(observation)){
-        attr(out, "iid") <- M.iid
-    }
+    attr(out, "iid") <- M.iid
     return(out)
  
 }
@@ -288,7 +284,7 @@ coef.BuyseTestAuc <- function(object,...){
 confint.BuyseTestAuc <- function(object,...){
     out <- object[object$fold=="global",c("estimate","se","lower","upper","p.value")]
     rownames(out) <- NULL
-    return(as.data.frame(out))
+    return(as.data.frame(out, stringsAsFactors = FALSE))
 }
 
 

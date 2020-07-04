@@ -2,14 +2,82 @@
 % Please edit documentation in R/RcppExports.R
 \name{GPC_cpp}
 \alias{GPC_cpp}
+\alias{GPC2_cpp}
 \title{C++ function performing the pairwise comparison over several endpoints.}
 \usage{
-GPC_cpp(endpoint, status, indexC, posC, indexT, posT, threshold, weight,
-  method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint,
-  index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC,
-  list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT,
-  zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf,
-  keepScore, returnIID, debug)
+GPC_cpp(
+  endpoint,
+  status,
+  indexC,
+  posC,
+  indexT,
+  posT,
+  threshold,
+  weight,
+  method,
+  D,
+  D_UTTE,
+  n_strata,
+  nUTTE_analyzedPeron_M1,
+  index_endpoint,
+  index_status,
+  index_UTTE,
+  list_survTimeC,
+  list_survTimeT,
+  list_survJumpC,
+  list_survJumpT,
+  list_lastSurv,
+  p_C,
+  p_T,
+  iid_survJumpC,
+  iid_survJumpT,
+  zeroPlus,
+  correctionUninf,
+  hierarchical,
+  hprojection,
+  neutralAsUninf,
+  keepScore,
+  precompute,
+  returnIID,
+  debug
+)
+
+GPC2_cpp(
+  endpoint,
+  status,
+  indexC,
+  posC,
+  indexT,
+  posT,
+  threshold,
+  weight,
+  method,
+  D,
+  D_UTTE,
+  n_strata,
+  nUTTE_analyzedPeron_M1,
+  index_endpoint,
+  index_status,
+  index_UTTE,
+  list_survTimeC,
+  list_survTimeT,
+  list_survJumpC,
+  list_survJumpT,
+  list_lastSurv,
+  p_C,
+  p_T,
+  iid_survJumpC,
+  iid_survJumpT,
+  zeroPlus,
+  correctionUninf,
+  hierarchical,
+  hprojection,
+  neutralAsUninf,
+  keepScore,
+  precompute,
+  returnIID,
+  debug
+)
 }
 \arguments{
 \item{endpoint}{A matrix containing the values of each endpoint (in columns) for each observation (in rows).}
@@ -74,12 +142,19 @@ GPC_cpp(endpoint, status, indexC, posC, indexT, posT, threshold, weight,
 
 \item{keepScore}{Should the result of each pairwise comparison be kept?}
 
+\item{precompute}{Have the integrals relative to the survival be already computed and stored in list_survTimeC/list_survTimeT and list_survJumpC/list_survJumpT (derivatives)}
+
 \item{returnIID}{Should the iid be computed?}
 
 \item{debug}{Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).}
 }
 \description{
 \code{GPC_cpp} call for each endpoint and each strata the pairwise comparison function suited to the type of endpoint and store the results.
+}
+\details{
+GPC_cpp implements GPC looping first over endpoints and then over pairs.
+To handle multiple endpoints, it stores some of the results which can be memory demanding when considering large sample - especially when computing the iid decomposition.
+GPC2_cpp implements GPC looping first over pairs and then over endpoints. It has rather minimal memory requirement but does not handle correction for uninformative pairs.
 }
 \author{
 Brice Ozenne
